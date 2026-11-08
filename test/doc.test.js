@@ -158,3 +158,25 @@ test('backup round trip and memory source', async () => {
   await d3.save();
   assert.deepEqual([...written], [1, 2, 7]);
 });
+
+test('search: a 4,096-byte wildcard pattern on zeros does not block the event loop and can be cancelled (VER8)', async () => {
+  const f = path.join(tmp, 'zeros-3mb.bin');
+  const data = Buffer.alloc(3 * 1024 * 1024); data[data.length - 1] = 1; fs.writeFileSync(f, data);
+  const d = await HexDocument.openFile(f);
+  const p = parsePattern('?? ' + '00 '.repeat(4094) + '01', 'hex');
+  assert.ok(p.ok && p.mask);
+  // the only match ends at the last byte; found both ways and in small slices
+  let maxGap = 0, last = Date.now();
+  const lag = setInterval(() => { const n = Date.now(); maxGap = Math.max(maxGap, n - last); last = n; }, 5);
+  const t0 = Date.now();
+  const r = await d.search(p, 0, false, false, () => Date.now() - t0 > 1500);
+  clearInterval(lag);
+  assert.ok(maxGap < 400, `event loop blocked for ${maxGap} ms`);
+  assert.ok(r.cancelled || r.offset === data.length - 4096, JSON.stringify(r));
+  assert.ok(Date.now() - t0 < 4000, `cancel took ${Date.now() - t0} ms`);
+  // backward from the end finds it quickly (the match is right there)
+  assert.equal((await d.search(p, data.length, true, false)).offset, data.length - 4096);
+  // a short wildcard pattern still finds the same match forward
+  assert.equal((await d.search(parsePattern('00 ?? 01', 'hex'), 0, false, false)).offset, data.length - 3);
+  await d.dispose();
+});

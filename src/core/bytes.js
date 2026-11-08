@@ -135,10 +135,10 @@ function findForward(buf, pp, from, limit = buf.length) {
   return -1;
 }
 
-/** Last match starting at index <= from. Returns -1 when none. */
-function findBackward(buf, pp, from) {
+/** Last match starting at index <= from (and >= lowest). Returns -1 when none. */
+function findBackward(buf, pp, from, lowest = 0) {
   const { pat, mask, ic, len } = pp;
-  for (let i = Math.min(from, buf.length - len); i >= 0; i--) if (matchesAt(buf, i, pat, mask, ic)) return i;
+  for (let i = Math.min(from, buf.length - len); i >= Math.max(0, lowest); i--) if (matchesAt(buf, i, pat, mask, ic)) return i;
   return -1;
 }
 

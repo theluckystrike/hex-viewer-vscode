@@ -231,6 +231,23 @@ class HexDocument {
       scanned += n;
       if (Date.now() - lastReport > 250) { lastReport = Date.now(); progress(scanned, size); await new Promise(r => setImmediate(r)); }
     };
+    // A wildcard pattern is checked byte by byte, so a long one on uniform data (zeros) costs up to len
+    // compares per position. Scan such chunks in slices of about 4M compares and yield in between, so the
+    // extension host stays responsive and a cancel takes effect within one slice.
+    const slice = Math.max(1024, Math.floor((4 << 20) / len));
+    const STOP = -2;
+    let lastYield = Date.now();
+    const sliced = async (fn, s0, end, stepBy) => {
+      for (let s = s0; stepBy > 0 ? s < end : s > end; s += stepBy) {
+        const i = fn(s);
+        if (i >= 0) return i;
+        if (Date.now() - lastYield > 30) {
+          await new Promise(r => setImmediate(r)); lastYield = Date.now();
+          if (shouldStop()) return STOP;
+        }
+      }
+      return -1;
+    };
     // forward over [a, b): matches starting in [a, b)
     const fwd = async (a, b) => {
       for (let pos = a; pos < b; pos += CHUNK) {
@@ -238,7 +255,8 @@ class HexDocument {
         const want = Math.min(CHUNK, b - pos) + len - 1;
         const buf = prep(await this.read(pos, want));
         const lim = Math.min(buf.length, (b - pos) + len - 1);
-        const i = plain ? buf.subarray(0, lim).indexOf(needle) : findForward(buf, pp, 0, lim);
+        const i = plain ? buf.subarray(0, lim).indexOf(needle) : await sliced(s => findForward(buf, pp, s, Math.min(lim, s + slice + len - 1)), 0, lim - len + 1, slice);
+        if (i === STOP) return { offset: -1, cancelled: true };
         if (i >= 0 && pos + i < b) return { offset: pos + i };
         await tick(Math.min(CHUNK, b - pos));
       }
@@ -250,7 +268,8 @@ class HexDocument {
         if (shouldStop()) return { offset: -1, cancelled: true };
         const start = Math.max(a, top - CHUNK + 1);
         const buf = prep(await this.read(start, top - start + len));
-        const i = plain ? buf.lastIndexOf(needle, top - start) : findBackward(buf, pp, top - start);
+        const i = plain ? buf.lastIndexOf(needle, top - start) : await sliced(s => findBackward(buf, pp, s, Math.max(0, s - slice + 1)), top - start, -1, -slice);
+        if (i === STOP) return { offset: -1, cancelled: true };
         if (i >= 0 && start + i >= a) return { offset: start + i };
         await tick(top - start + 1);
       }

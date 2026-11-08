@@ -1,4 +1,4 @@
-# Hex Viewer & Binary Viewer, Hex Editor (Large Files)
+# Hex Viewer & Binary Viewer, Hex Editor
 
 ![License MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Works offline](https://img.shields.io/badge/network-none-green)

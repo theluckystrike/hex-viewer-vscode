@@ -11,7 +11,7 @@ const { registerSupport, commandUris, showLinks } = require('./support');
 const VIEW_ANY = 'hexViewer.editor';     // "Open With" for every file
 const VIEW_BIN = 'hexViewer.binary';     // default editor for .bin, .dat, .img, .rom, .dmp, .dump
 const VIEW_TYPES = [VIEW_ANY, VIEW_BIN];
-const EXT_ID = 'zovo.hex-viewer';
+const EXT_ID = 'zovo.zovo-hex-viewer';
 const MAX_COPY = 32 << 20;
 let rating = { success() {}, failure() {} };
 

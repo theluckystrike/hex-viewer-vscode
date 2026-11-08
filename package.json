@@ -1,5 +1,5 @@
 {
-  "name": "hex-viewer",
+  "name": "zovo-hex-viewer",
   "displayName": "Hex Viewer & Binary Viewer, Hex Editor (Large Files)",
   "description": "Hex viewer, binary viewer and hex editor for VS Code that opens files of any size (4 GB and more) in under a second. Go to offset, find hex or text, copy as C array, Python bytes or base64, a data inspector, and byte editing with undo. Free, no sign-in, works offline.",
   "version": "0.1.0",

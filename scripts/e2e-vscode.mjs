@@ -15,7 +15,25 @@ const hash = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest(
 const P = n => path.join(ws, n);
 // the edit check works on a copy, so the other samples stay as made
 fs.copyFileSync(P('firmware.bin'), P('edit-me.bin'));
-for (const f of fs.readdirSync(ws)) { try { const st = fs.lstatSync(P(f)); if (st.isFile() && st.size < 50e6 && f !== 'edit-me.bin' && f !== 'shrinks.bin' && (st.mode & 0o444)) R.hashes[f] = hash(P(f)); } catch {} }
+// 0.2.0 samples: insert/delete target, compare pair, read-only file, a second 4 GB sparse file with one different byte
+fs.copyFileSync(P('firmware.bin'), P('grow-me.bin'));
+{ const a = fs.readFileSync(P('firmware.bin')); const b = Buffer.from(a); b[0x40] ^= 0xff; b[0x41] ^= 0xff; b[0x9000] = 0x77; fs.writeFileSync(P('cmp-a.bin'), a); fs.writeFileSync(P('cmp-b.bin'), Buffer.concat([b, Buffer.from('TAIL')])); }
+try { fs.chmodSync(P('readonly.bin'), 0o644); } catch {}
+fs.writeFileSync(P('readonly.bin'), Buffer.from('read only bytes')); fs.chmodSync(P('readonly.bin'), 0o444);
+try { fs.rmSync(P('link-to-grow.bin')); } catch {}
+fs.symlinkSync('grow-me.bin', P('link-to-grow.bin'));
+if (fs.existsSync(P('big4g.bin'))) {
+  const sz = fs.statSync(P('big4g.bin')).size;
+  const h = fs.openSync(P('big4g-b.bin'), 'w'); fs.ftruncateSync(h, sz); fs.closeSync(h);
+  // same tail markers as big4g.bin, plus one changed byte 64 bytes before the end
+  const src = fs.openSync(P('big4g.bin'), 'r'), dst = fs.openSync(P('big4g-b.bin'), 'r+');
+  const tail = Buffer.alloc(1 << 20); const off = sz - tail.length; fs.readSync(src, tail, 0, tail.length, off); tail[tail.length - 64] ^= 0x5a;
+  fs.writeSync(dst, tail, 0, tail.length, off);
+  const head = Buffer.alloc(1 << 20); fs.readSync(src, head, 0, head.length, 0); fs.writeSync(dst, head, 0, head.length, 0);
+  const mid = Buffer.alloc(64); fs.readSync(src, mid, 0, 64, 0xffffffc0); fs.writeSync(dst, mid, 0, 64, 0xffffffc0);
+  fs.closeSync(src); fs.closeSync(dst);
+}
+for (const f of fs.readdirSync(ws)) { try { const st = fs.lstatSync(P(f)); if (st.isFile() && st.size < 50e6 && f !== 'edit-me.bin' && f !== 'shrinks.bin' && f !== 'grow-me.bin' && (st.mode & 0o444)) R.hashes[f] = hash(P(f)); } catch {} }
 fs.rmSync(path.join(work, 'ud'), { recursive: true, force: true });
 R.install = installVsix(work, vsix);
 const clipBefore = (() => { try { return execSync('pbpaste', { encoding: 'utf8' }); } catch { return null; } })();
@@ -25,7 +43,8 @@ const vs = await launch(work, Number(port), ws, {
 });
 const settingsFile = path.join(work, 'ud', 'User', 'settings.json');
 const shots = [];
-const shot = async name => { const f = path.join(shotDir, `hex-${String(shots.length + 1).padStart(2, '0')}-${name}.png`); await vs.shot(f); shots.push(f); return f; };
+// GATE_NOSHOT=1: no screenshots (VS Code 1.90.2 on Electron 29 hangs in Page.captureScreenshot)
+const shot = async name => { if (process.env.GATE_NOSHOT) return null; const f = path.join(shotDir, `hex-${String(shots.length + 1).padStart(2, '0')}-${name}.png`); await vs.shot(f); shots.push(f); return f; };
 const step = async (name, fn) => {
   const t0 = Date.now();
   try { const v = await fn(); R.steps.push({ name, ok: v !== false, value: v, ms: Date.now() - t0 }); console.log('PASS', name); }
@@ -327,6 +346,195 @@ try {
     await vs.wvClick(wv, `document.querySelector('.side h2 .link')`);
     if (tabs !== 1 || ins.uint32 !== width) throw new Error(JSON.stringify({ tabs, uint32: ins.uint32, width }));
     return { shot: f, tabs, pngWidthBigEndian: ins.uint32 };
+  });
+
+  // ---------- 0.2.0: insert and delete, safe save, compare ----------
+  const dialogPick = async file => {
+    // the simple file dialog (files.simpleDialog.enable) is a quick input: type the path, then Enter
+    const ib = await vs.waitFor(async () => JSON.parse(await vs.wbEval(`(() => { const i = [...document.querySelectorAll('.quick-input-widget input')].find(x => x.type !== 'checkbox' && x.getBoundingClientRect().width > 0); if (!i) return 'null'; const b = i.getBoundingClientRect(); return b.width ? JSON.stringify(b) : 'null'; })()`)), 6000);
+    if (!ib) throw new Error('no file dialog');
+    await vs.click(ib.x + ib.width / 2, ib.y + ib.height / 2); await vs.key('a', 'KeyA', 4, 65); await vs.type(file);
+    await sleep(700); await vs.key('Enter', 'Enter'); await sleep(1200);
+  };
+  const quickTitle = () => vs.wbEval(`(() => { const w = document.querySelector('.quick-input-widget'); return w && w.style.display !== 'none' ? ((w.querySelector('.quick-input-title') || {}).textContent || '') : ''; })()`);
+  // run a palette command and wait until its input box or dialog shows the expected title (once more if it did not)
+  const cmdBox = async (label, re) => { for (let i = 0; i < 2; i++) { await cmd(label); if (await vs.waitFor(async () => re.test(await quickTitle()), 5000, 150)) return true; await vs.key('Escape', 'Escape'); await sleep(300); } throw new Error('no input box for ' + label + ' (title: ' + (await quickTitle()) + ')'); };
+  const cprobe = async w => JSON.parse(await vs.wvEval(w, `JSON.stringify(window.hexCompareProbe ? window.hexCompareProbe() : null)`));
+  const findCmp = async (title, ms = 15000) => vs.waitFor(async () => (await vs.webviews()).find(w => w.title === title && w.w > 0), ms);
+  const press = async (key, code, mod = 0, kc) => { await vs.key(key, code, mod, kc); await sleep(250); };
+  await step('insert mode: Insert key, type bytes and text, Delete, Backspace, Cmd+X, paste inserts, append at the end; save grows the file; sha256 equals a JS model', async () => {
+    await closeAll();
+    const orig = fs.readFileSync(P('grow-me.bin'));
+    let m = Buffer.from(orig);
+    const ins = (at, b) => { m = Buffer.concat([m.subarray(0, at), Buffer.from(b), m.subarray(at)]); };
+    const del = (a, b) => { m = Buffer.concat([m.subarray(0, a), m.subarray(b)]); };
+    await openHex('grow-me.bin');
+    await clickCell(0x10);
+    await press('Insert', 'Insert', 0, 45);
+    let q = await probe();
+    if (!q.insert || !/^Insert/.test(q.mode)) throw new Error('Insert key did not switch: ' + JSON.stringify({ insert: q.insert, mode: q.mode }));
+    for (const k of ['a', 'b', 'c', 'd']) await press(k, 'Key' + k.toUpperCase());
+    ins(0x10, [0xab, 0xcd]);
+    await press('Tab', 'Tab', 0, 9); await press('X', 'KeyX', 8, 88); await press('Tab', 'Tab', 0, 9);
+    ins(0x12, [0x58]);
+    await press('Delete', 'Delete', 0, 46); del(0x13, 0x14);
+    await press('Backspace', 'Backspace', 0, 8); del(0x12, 0x13);
+    await sleep(500);
+    const row1 = await hexRow(1);
+    await shot('insert-mode');
+    // cut 4 bytes at 0x20 with the real Cmd+X, then paste them at 0 (insert mode, hex column)
+    await gotoBox('0x20'); for (let i = 0; i < 3; i++) await press('ArrowRight', 'ArrowRight', 8);
+    await press('x', 'KeyX', 4, 88); await sleep(600);
+    const cut = execSync('pbpaste', { encoding: 'utf8' });
+    const cutWant = [...m.subarray(0x20, 0x24)].map(v => v.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+    const cutBytes = Buffer.from(m.subarray(0x20, 0x24)); del(0x20, 0x24);
+    await gotoBox('0'); await press('v', 'KeyV', 4, 86); await sleep(600); ins(0, cutBytes);
+    // append: Cmd+End goes one past the last byte in insert mode
+    await vs.wvClick(wv, `document.querySelector('.rows .row .hx .b')`);
+    await press('End', 'End', 4, 35); await sleep(400);
+    q = await probe();
+    const atEnd = q.cursor === m.length;
+    for (const k of ['f', 'e']) await press(k, 'Key' + k.toUpperCase());
+    ins(m.length, [0xfe]);
+    await sleep(500);
+    q = await probe();
+    await press('s', 'KeyS', 4, 83); await sleep(2000);
+    const got = fs.readFileSync(P('grow-me.bin'));
+    const dirty = await vs.wbEval(`!!document.querySelector('.editor-group-container.active .tab.active.dirty')`);
+    const leftovers = fs.readdirSync(ws).filter(n => n.includes('hexviewer'));
+    if (cut !== cutWant || !atEnd || q.size !== m.length || !got.equals(m) || dirty || leftovers.length) throw new Error(JSON.stringify({ cut, cutWant, atEnd, size: q.size, want: m.length, disk: got.length, same: got.equals(m), dirty, leftovers, row1 }));
+    // undo the append after the save, save again: the file is one byte shorter
+    await press('z', 'KeyZ', 4, 90); await sleep(500);
+    await press('s', 'KeyS', 4, 83); await sleep(1500);
+    const got2 = fs.readFileSync(P('grow-me.bin'));
+    if (!got2.equals(m.subarray(0, m.length - 1))) throw new Error('undo after save then save: ' + got2.length + ' vs ' + (m.length - 1));
+    return { origSize: orig.length, savedSize: got.length, afterUndoSave: got2.length, row1, cut, sha256: hash(P('grow-me.bin')) };
+  });
+  await step('insert mode on a 4 GB sparse file: insert at offset 0 and delete near the end are instant, last row right, undo makes it clean', async () => {
+    await closeAll();
+    const size = fs.statSync(P('big4g.bin')).size;
+    vs.open(P('big4g.bin')); wv = await findWv('big4g.bin', 15000); await rendered();
+    await clickCell(0);
+    const before = await probe();
+    if (!before.insert) await press('Insert', 'Insert', 0, 45);
+    const t0 = Date.now();
+    for (const k of ['4', '2']) await press(k, 'Digit' + k);
+    const q1 = await vs.waitFor(async () => { const q = await probe(); return q.size === size + 1 && q; }, 5000, 50);
+    const insMs = Date.now() - t0;
+    await press('End', 'End', 4, 35);
+    await vs.waitFor(async () => /LASTBYT/.test(await E(`[...document.querySelectorAll('.rows .row')].map(r => r.querySelector('.tx').textContent).join('')`)), 5000, 100);
+    const q2 = await probe();
+    const lastText = await E(`[...document.querySelectorAll('.rows .row')].map(r => r.querySelector('.tx').textContent).join('|')`);
+    const mem = extHostMB(); R.memory.push({ at: '4 GB insert', mem });
+    await press('z', 'KeyZ', 4, 90); await press('z', 'KeyZ', 4, 90); await sleep(800);
+    const q3 = await probe();
+    const dirty = await vs.wbEval(`!!document.querySelector('.editor-group-container.active .tab.active.dirty')`);
+    await press('Insert', 'Insert', 0, 45);
+    if (!q1 || q2.cursor !== size + 1 || !/LASTBYTE/.test(lastText.replace(/\|/g, '')) || q3.size !== size || dirty) throw new Error(JSON.stringify({ q1: q1 && q1.size, cursor: q2.cursor, size, q3: q3.size, dirty, lastText: lastText.slice(-80) }));
+    return { insertMs: insMs, sizeAfterInsert: q1.size, cursorAtEnd: q2.cursor, extHostMB: Math.max(...mem.map(x => x.mb), 0), cleanAfterUndo: !dirty };
+  });
+  await step('save through a symlink: link-to-grow.bin stays a link, the target grows', async () => {
+    await closeAll();
+    const before = fs.statSync(P('grow-me.bin')).size;
+    await openHex('link-to-grow.bin');
+    await cmdBox('Hex Viewer: Insert Bytes...', /^Insert bytes$/);
+    await vs.type('8 EE'); await sleep(300); await vs.key('Enter', 'Enter'); await sleep(800);
+    await press('s', 'KeyS', 4, 83); await sleep(1500);
+    const isLink = fs.lstatSync(P('link-to-grow.bin')).isSymbolicLink();
+    const after = fs.statSync(P('grow-me.bin')).size;
+    if (!isLink || after !== before + 8) throw new Error(JSON.stringify({ isLink, before, after }));
+    return { isLink, before, after };
+  });
+  await step('hostile: read-only file in insert mode refuses typing, Delete and Cmd+X with a hint; file unchanged', async () => {
+    await closeAll();
+    const h0 = hash(P('readonly.bin'));
+    await openHex('readonly.bin');
+    await clickCell(2);
+    await press('Insert', 'Insert', 0, 45);
+    for (const k of ['a', 'b']) await press(k, 'Key' + k.toUpperCase());
+    await press('Delete', 'Delete', 0, 46); await press('x', 'KeyX', 4, 88);
+    await sleep(500);
+    const q = await probe();
+    const dirty = await vs.wbEval(`!!document.querySelector('.editor-group-container.active .tab.active.dirty')`);
+    if (q.size !== 15 || dirty || hash(P('readonly.bin')) !== h0 || !q.readOnly) throw new Error(JSON.stringify({ size: q.size, dirty, readOnly: q.readOnly, hint: q.hint }));
+    return { size: q.size, readOnly: q.readOnly, hint: q.hint, mode: q.mode };
+  });
+  await step('compare: "Compare..." button, pick the second file; summary, F7 / Shift+F7 jump between the 3 areas', async () => {
+    await closeAll();
+    await openHex('cmp-a.bin');
+    await vs.wvClick(wv, `[...document.querySelectorAll('.toolbar button')].find(b => b.textContent === 'Compare...')`);
+    await sleep(800);
+    await dialogPick(P('cmp-b.bin'));
+    const cw = await findCmp('cmp-a.bin ↔ cmp-b.bin');
+    if (!cw) throw new Error('no compare panel');
+    const st = await vs.waitFor(async () => { const c = await cprobe(cw); return c && c.stats && c; }, 15000);
+    const hops = [];
+    for (let i = 0; i < 3; i++) { await vs.wvClick(cw, `document.querySelector('.rows .row .hx .b')`, {}); break; }
+    await vs.wvClick(cw, `[...document.querySelectorAll('.toolbar button')].find(b => /Next difference/.test(b.textContent))`); await sleep(700);
+    hops.push((await cprobe(cw)).cursor);
+    for (let i = 0; i < 2; i++) { await press('F7', 'F7', 0, 118); await sleep(700); hops.push((await cprobe(cw)).cursor); }
+    await press('F7', 'F7', 8, 118); await sleep(700); hops.push((await cprobe(cw)).cursor);
+    const c = await cprobe(cw);
+    await shot('compare-two-files');
+    const size = fs.statSync(P('cmp-a.bin')).size;
+    const s = st.stats;
+    if (s.bytes !== 3 + 4 || s.runs !== 3 || hops[0] !== 0x40 || hops[1] !== 0x9000 || hops[2] !== size || hops[3] !== 0x9000 || !(c.diffCells > 0)) throw new Error(JSON.stringify({ stats: s, hops, diffCells: c.diffCells }));
+    return { summary: c.summary, hops: hops.map(h => '0x' + h.toString(16)), status: c.status };
+  });
+  await step('compare in the Explorer: select two files, right-click > Compare in Hex Viewer', async () => {
+    await closeAll();
+    await cmd('View: Show Explorer'); await sleep(600);
+    const rowPos = async name => JSON.parse(await vs.wbEval(`(() => { const r = [...document.querySelectorAll('.explorer-folders-view .monaco-list-row')].find(r => (r.querySelector('.label-name') || {}).textContent === ${JSON.stringify(name)}); if (!r) return 'null'; r.scrollIntoView({ block: 'center' }); const b = r.getBoundingClientRect(); return JSON.stringify({ x: b.x + 60, y: b.y + b.height / 2 }); })()`));
+    const a = await rowPos('cmp-a.bin'); if (!a) throw new Error('row cmp-a.bin');
+    await vs.click(a.x, a.y); await sleep(300);
+    const b = await rowPos('cmp-b.bin'); if (!b) throw new Error('row cmp-b.bin');
+    await vs.click(b.x, b.y, { modifiers: 4 }); await sleep(300);
+    await vs.click(b.x, b.y, { button: 'right' }); await sleep(800);
+    const item = await vs.waitFor(async () => JSON.parse(await vs.wbEval(`(() => { const roots = [document, ...[...document.querySelectorAll('.context-view *')].filter(e => e.shadowRoot).map(e => e.shadowRoot)]; for (const root of roots) { const it = [...root.querySelectorAll('.action-label')].find(a => a.textContent.trim() === 'Compare in Hex Viewer'); if (it) { const r = it.getBoundingClientRect(); if (r.width) return JSON.stringify({ x: r.x + r.width / 2, y: r.y + r.height / 2 }); } } return 'null'; })()`)), 4000);
+    if (!item) {
+      await vs.key('Escape', 'Escape');
+      const jv = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); const v = /Code\/(\d+)\.(\d+)/.exec((jv['User-Agent'] || '') + ' ' + (jv.Browser || ''));
+      if (v && Number(v[2]) < 93) throw new Error('SKIP native context menu in this VS Code (the button and command paths are checked in the other steps)');
+      throw new Error('no "Compare in Hex Viewer" in the context menu');
+    }
+    await vs.click(item.x, item.y); await sleep(1200);
+    const cw = (await findCmp('cmp-a.bin ↔ cmp-b.bin', 8000)) || (await findCmp('cmp-b.bin ↔ cmp-a.bin', 2000));
+    if (!cw) throw new Error('no compare panel from the Explorer');
+    const c = await vs.waitFor(async () => { const p = await cprobe(cw); return p && p.stats && p; }, 15000);
+    return { title: cw.title, summary: c.summary };
+  });
+  await step('compare two 4 GB sparse files: next difference near the end, count, extension host memory', async () => {
+    await closeAll();
+    await cmdBox('Hex Viewer: Compare in Hex Viewer', /first file/);
+    // no active file: the dialog takes the first file, then the second
+    await dialogPick(P('big4g.bin'));
+    const second = await vs.waitFor(async () => JSON.parse(await vs.wbEval(`JSON.stringify(!!document.querySelector('.quick-input-widget input') && document.querySelector('.quick-input-widget').style.display !== 'none')`)), 4000);
+    if (second) await dialogPick(P('big4g-b.bin'));
+    const cw = await findCmp('big4g.bin ↔ big4g-b.bin', 15000);
+    if (!cw) throw new Error('no compare panel for the 4 GB pair');
+    const t0 = Date.now();
+    await vs.wvClick(cw, `document.querySelector('.rows .row .hx .b')`);
+    await press('F7', 'F7', 0, 118);
+    const size = fs.statSync(P('big4g.bin')).size;
+    const hit = await vs.waitFor(async () => { const c = await cprobe(cw); return c.cursor === size - 64 && c; }, 60000, 200);
+    const ms = Date.now() - t0;
+    const st = await vs.waitFor(async () => { const c = await cprobe(cw); return c.stats && c; }, 60000, 500);
+    const mem = extHostMB(); R.memory.push({ at: '4 GB compare', mem });
+    await shot('compare-4gb');
+    if (!hit || !st || st.stats.bytes !== 1 || Math.max(...mem.map(x => x.mb), 0) > 400) throw new Error(JSON.stringify({ hit: !!hit, stats: st && st.stats, mem }));
+    return { firstDifferenceMs: ms, at: '0x' + (size - 64).toString(16), summary: st.summary, statsMs: st.stats.ms, extHostMB: Math.max(...mem.map(x => x.mb), 0) };
+  });
+  await step('hostile compare: a file without read permission gives a plain error, no panel', async () => {
+    await closeAll();
+    await openHex('cmp-a.bin');
+    await cmdBox('Hex Viewer: Compare in Hex Viewer', /compare cmp-a\.bin with/);
+    await dialogPick(P('locked.bin'));
+    await sleep(1000);
+    const notes = (await vs.notifications()).join(' | ');
+    const panel = await findCmp('cmp-a.bin ↔ locked.bin', 1500);
+    await cmd('Notifications: Clear All Notifications'); await sleep(400);
+    if (panel || !/cannot compare/i.test(notes)) throw new Error(JSON.stringify({ panel: !!panel, notes }));
+    return notes;
   });
   await step('hostile: symlink loop (loop.bin -> loop.bin) through "Open in Hex Viewer" and the open dialog', async () => {
     // The Explorer does not list a link loop and the VS Code CLI does not open one, so pick it in the dialog

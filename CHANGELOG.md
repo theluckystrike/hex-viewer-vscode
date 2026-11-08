@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 (2026-11-09)
+
+- Insert and delete bytes. Press Insert (or click the mode in the status line) to switch between overwrite and insert mode. Delete, Backspace, Ctrl+X (cut) and paste work on any selection, with undo and redo. "Insert Bytes..." adds a run of bytes, such as `0x100 FF`.
+- Insert and delete are instant on files of any size: only a list of changes is kept until you save.
+- Safe save: when the size changes, a new copy is written in the same folder and then swapped in. Hex Viewer checks the free disk space first. Symbolic links and file permissions stay as they were.
+- Compare two files byte by byte: "Compare in Hex Viewer" in the Explorer menu (select two files) or the Compare... button. Side by side view, F7 and Shift+F7 for the next and previous difference, a count of differing bytes and areas, and marks on the scroll bar. Works on 4 GB and larger files.
+
 ## 0.1.0 (2026-11-08)
 
 First release.

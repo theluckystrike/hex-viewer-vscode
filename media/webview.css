@@ -69,3 +69,16 @@ input.bad { border-color: var(--vscode-inputValidation-errorBorder, #be1100); }
 .status .hint { overflow: hidden; text-overflow: ellipsis; opacity: .9; }
 .status .info { opacity: .8; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* insert mode and compare view (0.2.0) */
+.cur.ins { background: transparent; color: inherit; box-shadow: inset 2px 0 0 var(--vscode-editorCursor-foreground, #aeafad); }
+.b.e.cur { background: transparent; box-shadow: inset 2px 0 0 var(--vscode-editorCursor-foreground, #aeafad); }
+.status .modebtn { height: 18px; padding: 0 6px; font-size: 11px; }
+.mid { flex: none; width: 1px; align-self: stretch; margin: 0 1.5ch 0 1ch; background: var(--vscode-panel-border, rgba(128,128,128,.4)); }
+.d { background: var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,.25)); color: var(--vscode-editorError-foreground, inherit); font-weight: 600; opacity: 1; }
+.x { background: repeating-linear-gradient(135deg, transparent 0 3px, rgba(128,128,128,.18) 3px 5px); }
+.files { gap: 24px; background: var(--vscode-editorWidget-background, transparent); font-size: 12px; flex-wrap: wrap; }
+.files .warnsz { color: var(--vscode-editorWarning-foreground, #cca700); }
+.sum { margin-right: 6px; }
+.sum.same { color: var(--vscode-testing-iconPassed, #73c991); opacity: 1; }
+.marks { position: absolute; inset: 0; pointer-events: none; }
+.marks .mk { position: absolute; left: 2px; right: 2px; min-height: 2px; background: var(--vscode-editorOverviewRuler-deletedForeground, rgba(255,0,0,.6)); }

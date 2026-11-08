@@ -1,8 +1,8 @@
 {
   "name": "zovo-hex-viewer",
   "displayName": "Hex Viewer & Binary Viewer, Hex Editor (Large Files)",
-  "description": "Hex viewer, binary viewer and hex editor for VS Code that opens files of any size (4 GB and more) in under a second. Go to offset, find hex or text, copy as C array, Python bytes or base64, a data inspector, and byte editing with undo. Free, no sign-in, works offline.",
-  "version": "0.1.0",
+  "description": "Hex viewer, binary viewer and hex editor for VS Code that opens files of any size (4 GB and more) in under a second. Insert and delete bytes, compare two files byte by byte, go to offset, find hex or text, a data inspector, copy as C array or base64. Free, works offline.",
+  "version": "0.2.0",
   "publisher": "zovo",
   "license": "MIT",
   "icon": "icon.png",
@@ -38,7 +38,11 @@
     "offset",
     "reverse engineering",
     "elf",
-    "offline"
+    "offline",
+    "hex diff",
+    "binary compare",
+    "binary diff",
+    "insert bytes"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
@@ -83,6 +87,9 @@
       { "command": "hexViewer.find", "title": "Find Bytes or Text", "category": "Hex Viewer" },
       { "command": "hexViewer.findNext", "title": "Find Next", "category": "Hex Viewer" },
       { "command": "hexViewer.findPrevious", "title": "Find Previous", "category": "Hex Viewer" },
+      { "command": "hexViewer.compare", "title": "Compare in Hex Viewer", "category": "Hex Viewer", "icon": "$(diff)" },
+      { "command": "hexViewer.insertBytes", "title": "Insert Bytes...", "category": "Hex Viewer" },
+      { "command": "hexViewer.toggleInsert", "title": "Switch Insert / Overwrite Mode", "category": "Hex Viewer" },
       { "command": "hexViewer.openWalkthrough", "title": "Get Started", "category": "Hex Viewer" },
       { "command": "hexViewer.supportDeveloper", "title": "Support the developer", "category": "Hex Viewer" },
       { "command": "hexViewer.moreViewers", "title": "More free viewers", "category": "Hex Viewer" }
@@ -92,7 +99,8 @@
     ],
     "menus": {
       "explorer/context": [
-        { "command": "hexViewer.openWith", "when": "!explorerResourceIsFolder", "group": "navigation@20" }
+        { "command": "hexViewer.openWith", "when": "!explorerResourceIsFolder", "group": "navigation@20" },
+        { "command": "hexViewer.compare", "when": "!explorerResourceIsFolder", "group": "3_compare@30" }
       ],
       "editor/title/context": [
         { "command": "hexViewer.openWith", "when": "resourceScheme != untitled && !(activeCustomEditorId =~ /^hexViewer\\./)", "group": "1_open@20" }
@@ -105,7 +113,9 @@
         { "command": "hexViewer.goToOffset", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
         { "command": "hexViewer.find", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
         { "command": "hexViewer.findNext", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
-        { "command": "hexViewer.findPrevious", "when": "activeCustomEditorId =~ /^hexViewer\\./" }
+        { "command": "hexViewer.findPrevious", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
+        { "command": "hexViewer.insertBytes", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
+        { "command": "hexViewer.toggleInsert", "when": "activeCustomEditorId =~ /^hexViewer\\./" }
       ]
     },
     "configuration": {
@@ -147,7 +157,7 @@
           {
             "id": "edit",
             "title": "Copy, inspect and edit bytes",
-            "description": "Select bytes with the mouse or Shift and the arrow keys, then copy them as hex, a C array, Python bytes, base64 or text. The data inspector reads the bytes at the cursor as integers, floats, times and a GUID. Type hex digits to overwrite bytes; Ctrl+Z undoes and Ctrl+S saves.",
+            "description": "Select bytes with the mouse or Shift and the arrow keys, then copy them as hex, a C array, Python bytes, base64 or text. The data inspector reads the bytes at the cursor as integers, floats, times and a GUID. Type hex digits to overwrite bytes, press Insert to add bytes, Delete to remove them; Ctrl+Z undoes and Ctrl+S saves.",
             "media": { "markdown": "walkthrough/edit.md" }
           },
           {

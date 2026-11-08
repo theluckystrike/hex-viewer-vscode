@@ -147,7 +147,7 @@ test('hostile: empty file, truncated while open, no permission, symlink loop, fo
 test('backup round trip and memory source', async () => {
   const d = HexDocument.fromBytes(Uint8Array.from([1, 2, 3, 4]), async () => {});
   await d.overwrite(1, Uint8Array.from([9]));
-  const j = d.backupJson();
+  const j = await d.backupJson();
   const d2 = HexDocument.fromBytes(Uint8Array.from([1, 2, 3, 4]), null);
   d2.restoreBackup(j);
   assert.deepEqual([...(await d2.read(0, 4))], [1, 9, 3, 4]);

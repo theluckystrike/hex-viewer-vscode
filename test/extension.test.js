@@ -164,3 +164,86 @@ test('webview HTML: strict CSP, nonce scripts, no remote origins', () => {
   for (const u of urls) assert.match(u, /^https:\/\/(csp|res\/|marketplace\.visualstudio\.com\/|github\.com\/|www\.paypal\.me\/)/, u);
   assert.match(html, /a&quot;&lt;b&gt;\.bin/);
 });
+
+test('insert, replace, delete and cut: resized messages, undo/redo events, save grows and shrinks the file', async () => {
+  const f = path.join(tmp, 'grow.bin'); fs.writeFileSync(f, Buffer.from('0123456789'));
+  const o = await open(f);
+  const events = [];
+  provider.onDidChangeCustomDocument(e => events.push(e));
+  await o.send({ type: 'edit', mode: 'insert', offset: 2, values: [0x41, 0x42], label: 'Insert text' });
+  assert.equal(o.last('resized').size, 12);
+  assert.deepEqual(o.last('resized').edited, [2, 3]);
+  await o.send({ type: 'edit', mode: 'insert', offset: 0, deleteCount: 2, values: [0x5a], label: 'Paste' });
+  assert.equal(o.last('resized').size, 11);
+  await o.send({ type: 'delete', start: 9, end: 11, label: 'Delete bytes' });
+  assert.equal(o.last('resized').size, 9);
+  await o.send({ type: 'cut', start: 1, end: 3, format: 'hexSpaced' });
+  assert.equal(state.clipboard, '41 42');
+  assert.match(o.last('copied').text, /Cut 2 bytes/);
+  assert.equal(events.length, 4);
+  assert.equal(events[3].label, 'Cut');
+  await provider.saveCustomDocument(o.doc);
+  assert.equal(fs.readFileSync(f, 'utf8'), 'Z234567');
+  events[3].undo(); events[2].undo();
+  await provider.saveCustomDocument(o.doc);
+  assert.equal(fs.readFileSync(f, 'utf8'), 'ZAB23456789');
+  events[2].redo();
+  assert.equal(o.last('resized').size, 9);
+  await o.send({ type: 'edit', mode: 'insert', offset: 99, values: [1] });
+  assert.equal(o.doc.hex.size, 9, 'insert past the end is ignored');
+});
+
+test('cut and delete respect read-only; insert bytes input parser', async () => {
+  const f = path.join(tmp, 'ro2.bin'); fs.writeFileSync(f, Buffer.alloc(8));
+  state.config.readOnly = true;
+  const o = await open(f);
+  await o.send({ type: 'delete', start: 0, end: 4 });
+  assert.match(o.last('notice').message, /Editing is off/);
+  await o.send({ type: 'cut', start: 0, end: 4, format: 'hex' });
+  assert.equal(o.doc.hex.size, 8);
+  state.config.readOnly = false;
+  const p = ext.parseInsert;
+  assert.deepEqual(p('16'), { ok: true, count: 16, fill: 0 });
+  assert.deepEqual(p('0x100 FF'), { ok: true, count: 256, fill: 255 });
+  assert.deepEqual(p('4 x 0x7f'), { ok: true, count: 4, fill: 127 });
+  assert.equal(p('0').ok, false);
+  assert.equal(p('abc').ok, false);
+  assert.equal(p(String(17 << 20)).ok, false);
+});
+
+test('protocol: insert, delete and cut messages are checked', () => {
+  assert.equal(validateWebviewMessage({ type: 'edit', offset: 0, values: [1], mode: 'overwrite', deleteCount: 3 }).ok, false);
+  assert.equal(validateWebviewMessage({ type: 'edit', offset: 0, values: [1], mode: 'insert', deleteCount: -1 }).ok, false);
+  assert.equal(validateWebviewMessage({ type: 'edit', offset: 0, values: [1], mode: 'insert', deleteCount: 2 }).msg.deleteCount, 2);
+  assert.equal(validateWebviewMessage({ type: 'edit', offset: 0, values: [1], mode: 'evil' }).msg.mode, 'overwrite');
+  assert.equal(validateWebviewMessage({ type: 'delete', start: 4, end: 4 }).ok, false);
+  assert.equal(validateWebviewMessage({ type: 'delete', start: 1.5, end: 4 }).ok, false);
+  assert.equal(validateWebviewMessage({ type: 'cut', start: 0, end: 4, format: 'exe' }).ok, false);
+  assert.equal(validateWebviewMessage({ type: 'cut', start: 0, end: 4, format: 'c' }).ok, true);
+});
+
+test('commands: insert bytes, toggle insert and compare are registered', () => {
+  for (const c of ['hexViewer.insertBytes', 'hexViewer.toggleInsert', 'hexViewer.compare']) assert.ok(vscodeMock.commands.list.includes(c), c);
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const ids = pkg.contributes.commands.map(c => c.command);
+  for (const c of vscodeMock.commands.list.filter(c => c.startsWith('hexViewer.'))) assert.ok(ids.includes(c), 'package.json lists ' + c);
+});
+
+test('insert mode: the second hex digit changes the inserted byte, so one typed byte is one undo step', async () => {
+  const f = path.join(tmp, 'merge.bin'); fs.writeFileSync(f, Buffer.from([1, 2, 3]));
+  const o = await open(f);
+  const events = [];
+  provider.onDidChangeCustomDocument(e => events.push(e));
+  await o.send({ type: 'edit', mode: 'insert', offset: 1, values: [0xa0], label: 'Insert byte' });
+  await o.send({ type: 'edit', offset: 1, values: [0xab], label: 'Insert byte', merge: true });
+  assert.equal(events.length, 1);
+  assert.deepEqual([...(await o.doc.hex.read(0, 4))], [1, 0xab, 2, 3]);
+  events[0].undo();
+  assert.deepEqual([...(await o.doc.hex.read(0, 4))], [1, 2, 3]);
+  events[0].redo();
+  assert.deepEqual([...(await o.doc.hex.read(0, 4))], [1, 0xab, 2, 3]);
+  // after an undo or a save, a merge request is a plain overwrite with its own undo step
+  await o.send({ type: 'edit', offset: 1, values: [0xcd], label: 'Insert byte', merge: true });
+  assert.equal(events.length, 2);
+  assert.equal(validateWebviewMessage({ type: 'edit', offset: 0, values: [1, 2], merge: true }).msg.merge, false);
+});

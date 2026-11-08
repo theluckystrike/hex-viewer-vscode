@@ -21,8 +21,19 @@ function validateWebviewMessage(m) {
       let v = m.values;
       if (Array.isArray(v)) { if (!v.every(x => Number.isInteger(x) && x >= 0 && x <= 255)) return { ok: false }; v = Uint8Array.from(v); }
       if (!(v instanceof Uint8Array) || v.length < 1 || v.length > MAX_EDIT) return { ok: false };
-      return { ok: true, msg: { type: 'edit', offset: m.offset, values: v, label: typeof m.label === 'string' ? m.label.slice(0, 40) : 'Edit' } };
+      const mode = m.mode === 'insert' ? 'insert' : 'overwrite';
+      const del = m.deleteCount === undefined ? 0 : m.deleteCount;
+      if (!isOff(del) || (mode === 'overwrite' && del)) return { ok: false };
+      return { ok: true, msg: { type: 'edit', offset: m.offset, values: v, mode, deleteCount: del, merge: m.merge === true && mode === 'overwrite' && v.length === 1, label: typeof m.label === 'string' ? m.label.slice(0, 40) : 'Edit' } };
     }
+    case 'delete':
+      if (!isOff(m.start) || !isOff(m.end) || m.end <= m.start) return { ok: false };
+      return { ok: true, msg: { type: 'delete', start: m.start, end: m.end, label: typeof m.label === 'string' ? m.label.slice(0, 40) : 'Delete' } };
+    case 'cut':
+      if (!isOff(m.start) || !isOff(m.end) || m.end <= m.start || !FORMATS.has(m.format)) return { ok: false };
+      return { ok: true, msg: { type: 'cut', start: m.start, end: m.end, format: m.format } };
+    case 'insertPrompt': case 'compareWith':
+      return { ok: true, msg: { type: m.type } };
     case 'copy':
       if (!isOff(m.start) || !isOff(m.end) || m.end < m.start || !FORMATS.has(m.format)) return { ok: false };
       return { ok: true, msg: { type: 'copy', start: m.start, end: m.end, format: m.format } };

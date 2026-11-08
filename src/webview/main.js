@@ -23,7 +23,7 @@ const S = {
   loaded: false, name: '', size: 0, fileType: '', readOnly: false, readOnlyReason: '', settings: {},
   bpr: 16, encoding: 'ascii', glyphs: false, le: true, upper: true, inspector: true,
   top: 0, rowsVisible: 10, rowH: 18, chW: 8,
-  cursor: 0, anchor: 0, column: 'hex', nibble: 0,
+  cursor: 0, anchor: 0, column: 'hex', nibble: 0, insert: !!saved.insert, pendingIns: null,
   match: null, // { start, end }
   searchId: 0, searching: false, lastSearch: null, renders: 0, rendered: false,
   blocks: new Map(), pending: new Set(), copyFormats: [],
@@ -41,6 +41,11 @@ function onMessage(m) {
     case 'patch': return onPatch(m);
     case 'saved': for (const b of S.blocks.values()) b.edited.clear(); return render();
     case 'reset': S.size = m.size; S.sizeText = m.sizeText; dropCache(); clampCursor(); return render();
+    case 'resized':
+      S.size = m.size; S.sizeText = m.sizeText; dropCache(); S.match = null;
+      for (const off of m.edited || []) markEdited(off);
+      clampCursor(); return render();
+    case 'toggleInsert': return toggleInsert();
     case 'changed':
       S.size = m.size; S.sizeText = m.sizeText; dropCache(); clampCursor(); S.match = null;
       if (m.message) notice(m.message, 'warn');
@@ -71,7 +76,20 @@ function applySettings(s, first) {
   if (!first && el.rows) { measure(); layout(); }
 }
 
-function persist() { vscode.setState({ bpr: S.bpr, encoding: S.encoding, le: S.le, inspector: S.inspector, cursor: S.cursor }); }
+function persist() { vscode.setState({ bpr: S.bpr, encoding: S.encoding, le: S.le, inspector: S.inspector, cursor: S.cursor, insert: S.insert, mode: saved.mode }); }
+
+/** Last cursor position: the last byte, or one past it in insert mode (to add bytes at the end). */
+function maxCursor() { return Math.max(0, S.insert ? S.size : S.size - 1); }
+
+function toggleInsert() {
+  if (!el.grid) return;
+  commitPending(); S.pendingIns = null; S.nibble = 0;
+  S.insert = !S.insert; saved.insert = S.insert;
+  if (S.insert && S.readOnly) hint(S.readOnlyReason || 'Editing is off (setting hexViewer.readOnly).');
+  else hint(S.insert ? 'Insert mode: typed and pasted bytes go in before the cursor and the file grows. Press Insert again for overwrite mode.' : 'Overwrite mode: typed and pasted bytes replace the bytes at the cursor.');
+  clampCursor(); persist(); render();
+  el.grid.focus();
+}
 
 // ---------- layout ----------
 
@@ -124,11 +142,12 @@ function init(m) {
   el.enc.addEventListener('change', () => { S.encoding = el.enc.value; saved.encoding = S.encoding; persist(); render(); });
   el.copy = $('select', { 'aria-label': 'Copy selection as', title: 'Copy the selection as...' }, $('option', { value: '', text: 'Copy as...' }), ...S.copyFormats.map(([v, t]) => $('option', { value: v, text: t })));
   el.copy.addEventListener('change', () => { if (el.copy.value) copySel(el.copy.value); el.copy.value = ''; el.grid.focus(); });
+  el.cmpBtn = $('button', { title: 'Compare this file with another file, byte by byte', text: 'Compare...', onclick: () => post({ type: 'compareWith' }) });
   el.insBtn = $('button', { class: 'tog', 'aria-pressed': String(S.inspector), title: 'Show or hide the data inspector', text: 'Inspector', onclick: () => { S.inspector = !S.inspector; el.insBtn.setAttribute('aria-pressed', String(S.inspector)); el.side.hidden = !S.inspector; persist(); layout(); } });
 
   el.toolbar = $('div', { class: 'toolbar', role: 'toolbar', 'aria-label': 'Hex Viewer tools' },
     el.goto, $('span', { class: 'sep' }), el.find, el.mode, el.ic, el.prev, el.next, el.findInfo,
-    $('span', { class: 'grow' }), el.bpr, el.enc, el.copy, el.insBtn);
+    $('span', { class: 'grow' }), el.bpr, el.enc, el.copy, el.cmpBtn, el.insBtn);
   el.banner = $('div', { class: 'banner', hidden: true, role: 'status' });
   el.grid = $('div', { class: 'grid', tabindex: '0', role: 'grid', 'aria-label': `Bytes of ${m.name}. Arrow keys move, Shift extends the selection, Tab switches between the hex and text columns.`, 'aria-readonly': String(S.readOnly) });
   el.head = $('div', { class: 'head', 'aria-hidden': 'true' });
@@ -147,10 +166,11 @@ function init(m) {
   el.stPos = $('span', { class: 'pos' });
   el.stSel = $('span', { class: 'selinfo' });
   el.stInfo = $('span', { class: 'info' });
+  el.modeBtn = $('button', { class: 'modebtn', title: 'Switch between overwrite and insert mode (Insert key)', onclick: () => toggleInsert() });
   el.stHint = $('span', { class: 'hint', 'aria-live': 'polite' });
   el.live = $('div', { class: 'sr', 'aria-live': 'polite' });
   const foot = document.getElementById('zovo-footer');
-  el.status.append(el.stPos, el.stSel, el.stInfo, el.stHint, $('span', { class: 'grow' }));
+  el.status.append(el.stPos, el.stSel, el.modeBtn, el.stInfo, el.stHint, $('span', { class: 'grow' }));
   if (foot && foot.content) el.status.append(foot.content.cloneNode(true));
   app.append(el.toolbar, el.banner, el.main, el.status, el.live);
 
@@ -163,6 +183,7 @@ function init(m) {
   document.addEventListener('keydown', onGlobalKey);
   document.addEventListener('copy', onCopy);
   document.addEventListener('paste', onPaste);
+  document.addEventListener('cut', onCut);
   new ResizeObserver(() => layout()).observe(el.gridWrap);
   for (const off of m.edited || []) markEdited(off);
   S.loaded = true;
@@ -182,7 +203,7 @@ function measure() {
   document.documentElement.style.setProperty('--row-h', S.rowH + 'px');
 }
 
-function totalRows() { return Math.max(1, Math.ceil(S.size / S.bpr)); }
+function totalRows() { return Math.max(1, Math.ceil((S.size + (S.insert ? 1 : 0)) / S.bpr)); }
 function maxTop() { return Math.max(0, totalRows() - S.rowsVisible + 1); }
 function offDigits() { return Math.max(8, Math.max(0, S.size - 1).toString(16).length); }
 
@@ -278,13 +299,13 @@ function render() {
   if (!el.rows || !S.loaded) return;
   if (S.lateEdits) { for (const off of [...S.lateEdits]) { const b = S.blocks.get(Math.floor(off / BLOCK)); if (b) { b.edited.add(off); S.lateEdits.delete(off); } } }
   const bpr = S.bpr, digits = offDigits();
-  el.empty.hidden = S.size > 0;
+  el.empty.hidden = S.size > 0 || S.insert;
   // header
   let h = `<span class="off">${'Offset'.padEnd(digits, ' ')}</span><span class="hx">`;
   for (let i = 0; i < bpr; i++) h += `<span class="b${i && i % 8 === 0 ? ' g' : ''}">${hex2(i % 256)}</span>`;
   h += `</span><span class="tx">${esc(ENCODINGS.find(e => e[0] === S.encoding)[1])}</span>`;
   el.head.innerHTML = S.upper ? h : h.toLowerCase().replace('offset', 'Offset');
-  if (!S.size) { el.rows.innerHTML = ''; updateStatus(); updateThumb(); return; }
+  if (!S.size && !S.insert) { el.rows.innerHTML = ''; updateStatus(); updateThumb(); return; }
   const [s0, s1] = selRange();
   const multi = s1 - s0 > 1;
   const m = S.match;
@@ -293,16 +314,22 @@ function render() {
   for (let r = 0; r < S.rowsVisible; r++) {
     const row = S.top + r;
     const start = row * bpr;
-    if (start >= S.size) break;
+    if (start > S.size || (start === S.size && !S.insert)) break;
     const count = Math.min(bpr, S.size - start);
     const rowBytes = bytesFrom(start, count + 3);
     if (rowBytes.length < count) missing = true;
-    const cells = rowBytes.length >= count ? textCells(rowBytes, count, S.encoding, start, S.glyphs) : null;
+    const cells = rowBytes.length >= count && count > 0 ? textCells(rowBytes, count, S.encoding, start, S.glyphs) : null;
     let hx = '', tx = '';
     for (let i = 0; i < bpr; i++) {
       const off = start + i;
       const g = i && i % 8 === 0 ? ' g' : '';
-      if (i >= count) { hx += `<span class="b e${g}"></span>`; tx += '<span class="c e"></span>'; continue; }
+      if (i >= count) {
+        // in insert mode the cell after the last byte takes the cursor, to add bytes at the end
+        const ph = S.insert && off === S.size;
+        hx += ph ? `<span class="b e ph${g}${off === S.cursor ? ' cur' : ''}" data-o="${i}"> </span>` : `<span class="b e${g}"></span>`;
+        tx += ph ? `<span class="c e ph${off === S.cursor ? ' cur2' : ''}" data-o="${i}"> </span>` : '<span class="c e"></span>';
+        continue;
+      }
       const v = i < rowBytes.length ? rowBytes[i] : -1;
       let cls = '';
       if (v === 0) cls += ' z';
@@ -311,10 +338,10 @@ function render() {
       if (isEdited(off)) cls += ' ed';
       const hs = v < 0 ? '  ' : (S.upper ? hex2(v) : hex2(v).toLowerCase());
       const atCur = off === S.cursor;
-      const hcur = atCur ? (S.column === 'hex' ? ' cur' + (S.nibble ? ' nib' : '') : ' cur2') : '';
+      const hcur = atCur ? (S.column === 'hex' ? ' cur' + (S.nibble ? ' nib' : S.insert ? ' ins' : '') : ' cur2') : '';
       hx += `<span class="b${g}${cls}${hcur}" data-o="${i}">${hs}</span>`;
       const c = cells ? cells[i] : { ch: ' ', kind: 'c' };
-      let tcls = cls + (atCur ? (S.column === 'text' ? ' cur' : ' cur2') : '');
+      let tcls = cls + (atCur ? (S.column === 'text' ? ' cur' + (S.insert ? ' ins' : '') : ' cur2') : '');
       if (c.kind !== 'p') tcls += ' np';
       tx += `<span class="c${tcls}" data-o="${i}">${c.ch === ' ' ? ' ' : esc(c.ch)}</span>`;
     }
@@ -344,9 +371,12 @@ function updateStatus() {
   const [s0, s1] = selRange();
   el.stPos.textContent = `Offset 0x${hexOffset(S.cursor, 1)} (${fmtInt(S.cursor)})`;
   el.stSel.textContent = s1 - s0 > 1 ? `${fmtInt(s1 - s0)} bytes selected (0x${hexOffset(s0, 1)} to 0x${hexOffset(s1 - 1, 1)})` : '';
-  const mode = S.readOnly ? 'Read-only' : S.column === 'hex' ? 'Overwrite (hex)' : 'Overwrite (text)';
-  el.stInfo.textContent = [S.fileType, S.sizeText, mode].filter(Boolean).join(' · ');
-  el.stInfo.title = S.readOnly ? (S.readOnlyReason || 'Editing is off (setting hexViewer.readOnly).') : 'Type hex digits (or text in the text column) to overwrite bytes. Ctrl+Z undoes, Ctrl+S saves.';
+  el.modeBtn.textContent = S.readOnly ? 'Read-only' : `${S.insert ? 'Insert' : 'Overwrite'} (${S.column})`;
+  el.modeBtn.disabled = S.readOnly;
+  el.stInfo.textContent = [S.fileType, S.sizeText].filter(Boolean).join(' · ');
+  el.modeBtn.title = S.readOnly ? (S.readOnlyReason || 'Editing is off (setting hexViewer.readOnly).') : S.insert
+    ? 'Insert mode: typing and paste add bytes before the cursor. Delete and Backspace remove bytes. Insert key or click: overwrite mode.'
+    : 'Overwrite mode: typing and paste replace bytes. Delete removes bytes. Insert key or click: insert mode.';
   clearTimeout(S.cursorTimer);
   S.cursorTimer = setTimeout(() => post({ type: 'cursor', offset: S.cursor, selStart: s0, selEnd: s1 }), 60);
 }
@@ -357,6 +387,7 @@ function renderInspector() {
   el.leBtn.title = 'Byte order for the numbers below. Click to switch.';
   // With a selection, the inspector reads from its first byte (select 4 bytes, read them as one number).
   const at = selRange()[0];
+  if (at >= S.size) { el.insBody.textContent = S.insert ? 'End of file. Type or paste to add bytes here.' : ''; return; }
   const b = bytesFrom(at, 16);
   if (!b.length && S.size) { el.insBody.textContent = 'Loading...'; return; }
   const rows = inspect(b, at, S.le);
@@ -370,7 +401,7 @@ function renderInspector() {
 // ---------- movement ----------
 
 function clampCursor() {
-  const last = Math.max(0, S.size - 1);
+  const last = maxCursor();
   S.cursor = Math.min(S.cursor, last); S.anchor = Math.min(S.anchor, last);
   S.top = Math.min(S.top, maxTop());
 }
@@ -384,9 +415,9 @@ function scrollToCursor(center) {
 }
 
 function moveTo(off, extend) {
-  if (!S.size) return;
-  commitPending();
-  S.cursor = Math.max(0, Math.min(S.size - 1, off));
+  if (!S.size && !S.insert) return;
+  commitPending(); S.pendingIns = null;
+  S.cursor = Math.max(0, Math.min(maxCursor(), off));
   if (!extend) S.anchor = S.cursor;
   S.nibble = 0;
   scrollToCursor(false);
@@ -395,8 +426,8 @@ function moveTo(off, extend) {
 }
 
 function gotoOffset(off, center) {
-  commitPending();
-  S.cursor = S.anchor = Math.max(0, Math.min(Math.max(0, S.size - 1), off));
+  commitPending(); S.pendingIns = null;
+  S.cursor = S.anchor = Math.max(0, Math.min(maxCursor(), off));
   S.nibble = 0; S.match = null;
   scrollToCursor(center);
   announce();
@@ -437,7 +468,7 @@ function onTrack(e) {
 
 function cellAt(target) {
   const cell = target.closest && target.closest('.b,.c');
-  if (!cell || cell.classList.contains('e') || cell.dataset.o === undefined) return null;
+  if (!cell || (cell.classList.contains('e') && !cell.classList.contains('ph')) || cell.dataset.o === undefined) return null;
   const row = cell.closest('.row');
   return { off: Number(row.dataset.r) + Number(cell.dataset.o), column: cell.classList.contains('b') ? 'hex' : 'text' };
 }
@@ -470,7 +501,8 @@ function onGlobalKey(e) {
 }
 
 function onKey(e) {
-  if (!S.size) return;
+  if (e.key === 'Insert' && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); toggleInsert(); return; }
+  if (!S.size && !S.insert) return;
   const mod = e.ctrlKey || e.metaKey;
   const ext = e.shiftKey;
   const page = Math.max(1, S.rowsVisible - 1) * S.bpr;
@@ -479,17 +511,20 @@ function onKey(e) {
     case 'ArrowLeft': to = S.cursor - 1; break;
     case 'ArrowRight': to = S.cursor + 1; break;
     case 'ArrowUp': to = S.cursor - S.bpr; if (to < 0) to = S.cursor; break;
-    case 'ArrowDown': to = S.cursor + S.bpr; if (to > S.size - 1) to = S.cursor; break;
+    case 'ArrowDown': to = S.cursor + S.bpr; if (to > maxCursor()) to = S.cursor; break;
     case 'PageUp': to = S.cursor - page; if (to < 0) to = S.cursor % S.bpr; S.top = Math.max(0, S.top - S.rowsVisible + 1); break;
-    case 'PageDown': to = S.cursor + page; if (to > S.size - 1) to = S.size - 1; S.top = Math.min(maxTop(), S.top + S.rowsVisible - 1); break;
+    case 'PageDown': to = S.cursor + page; if (to > maxCursor()) to = maxCursor(); S.top = Math.min(maxTop(), S.top + S.rowsVisible - 1); break;
     case 'Home': to = mod ? 0 : S.cursor - (S.cursor % S.bpr); break;
-    case 'End': to = mod ? S.size - 1 : Math.min(S.size - 1, S.cursor - (S.cursor % S.bpr) + S.bpr - 1); break;
+    case 'End': to = mod ? maxCursor() : Math.min(maxCursor(), S.cursor - (S.cursor % S.bpr) + S.bpr - 1); break;
+    case 'Delete': e.preventDefault(); return deleteKey(false);
+    case 'Backspace': e.preventDefault(); return deleteKey(true);
     case 'Tab': e.preventDefault(); commitPending(); S.column = S.column === 'hex' ? 'text' : 'hex'; S.nibble = 0; render(); return;
     case 'Escape': S.anchor = S.cursor; S.match = null; render(); return;
   }
   if (to !== null) { e.preventDefault(); moveTo(to, ext); return; }
-  if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); S.anchor = 0; S.cursor = S.size - 1; render(); return; }
+  if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); if (S.size) { S.anchor = 0; S.cursor = S.size - 1; render(); } return; }
   if (mod || e.altKey || e.key.length !== 1) return;
+  if (S.insert) return typeInsert(e);
   // typing overwrites
   if (S.column === 'hex') {
     if (!/^[0-9a-fA-F]$/.test(e.key)) return;
@@ -519,6 +554,60 @@ function onKey(e) {
     writeBytes(S.cursor, [v], 'Type text');
     if (S.cursor < S.size - 1) moveTo(S.cursor + 1, false); else render();
   }
+}
+
+/** Insert mode: the first hex digit inserts a byte (digit 0), the second digit sets its low half. */
+function typeInsert(e) {
+  if (S.column === 'hex') {
+    if (!/^[0-9a-fA-F]$/.test(e.key)) return;
+    e.preventDefault();
+    if (S.readOnly) return readOnlyHint();
+    const d = parseInt(e.key, 16);
+    const p = S.pendingIns;
+    if (p && p.off === S.cursor) {
+      S.pendingIns = null; S.nibble = 0;
+      post({ type: 'edit', offset: p.off, values: Uint8Array.of((p.hi << 4) | d), label: 'Insert byte', merge: true });
+      S.cursor = S.anchor = p.off + 1; scrollToCursor(false); persist();
+    } else {
+      S.pendingIns = { off: S.cursor, hi: d };
+      S.nibble = 1;
+      sendInsert(S.cursor, Uint8Array.of(d << 4), 0, 'Insert byte');
+      render();
+    }
+  } else {
+    const v = byteForChar(e.key, S.encoding === 'latin1' || S.encoding === 'ebcdic' ? S.encoding : 'ascii');
+    if (v < 0) return;
+    e.preventDefault();
+    if (S.readOnly) return readOnlyHint();
+    sendInsert(S.cursor, Uint8Array.of(v), 0, 'Insert text');
+    S.cursor = S.anchor = S.cursor + 1; scrollToCursor(false); persist();
+  }
+}
+
+/** Send an insert (or a replace of deleteCount bytes) and grow the view at once; the host confirms the size. */
+function sendInsert(off, values, deleteCount, label) {
+  S.size += values.length - deleteCount;
+  post({ type: 'edit', mode: 'insert', offset: off, values, deleteCount, label });
+}
+
+function deleteKey(back) {
+  if (S.readOnly) return readOnlyHint();
+  commitPending(); S.pendingIns = null; S.nibble = 0;
+  const [s0, s1] = selRange();
+  let a, b;
+  if (s1 - s0 > 1) { a = s0; b = Math.min(s1, S.size); }
+  else if (back) {
+    if (!S.insert) return moveTo(S.cursor - 1, false); // overwrite mode: Backspace moves left, like most hex editors
+    if (S.cursor === 0) return;
+    a = S.cursor - 1; b = S.cursor;
+  } else { if (S.cursor >= S.size) return; a = S.cursor; b = S.cursor + 1; }
+  if (b <= a) return;
+  post({ type: 'delete', start: a, end: b, label: b - a === 1 ? 'Delete byte' : 'Delete bytes' });
+  S.size -= b - a;
+  S.cursor = S.anchor = Math.min(a, maxCursor());
+  S.match = null;
+  if (b - a > 1) hint(`Deleted ${fmtInt(b - a)} bytes. Ctrl+Z puts them back.`);
+  scrollToCursor(false); persist();
 }
 
 function setLocal(o, v) {
@@ -560,8 +649,22 @@ function onCopy(e) {
   copySel(S.column === 'text' ? 'latin1' : (S.settings.copyFormat || 'hexSpaced'));
 }
 
-function onPaste(e) {
+function onCut(e) {
   if (inField() || !S.size) return;
+  e.preventDefault();
+  if (S.readOnly) return readOnlyHint();
+  commitPending(); S.pendingIns = null; S.nibble = 0;
+  const [s0, s1] = selRange();
+  const end = Math.min(s1, S.size);
+  if (end <= s0) return;
+  post({ type: 'cut', start: s0, end, format: S.column === 'text' ? 'latin1' : (S.settings.copyFormat || 'hexSpaced') });
+  S.size -= end - s0;
+  S.cursor = S.anchor = Math.min(s0, maxCursor()); S.match = null;
+  scrollToCursor(false); persist();
+}
+
+function onPaste(e) {
+  if (inField() || (!S.size && !S.insert)) return;
   e.preventDefault();
   if (S.readOnly) return readOnlyHint();
   commitPending(); S.nibble = 0;
@@ -574,6 +677,15 @@ function onPaste(e) {
     bytes = Uint8Array.from([...text].map(ch => byteForChar(ch, S.encoding === 'latin1' || S.encoding === 'ebcdic' ? S.encoding : 'latin1')).filter(v => v >= 0));
   }
   if (!bytes.length) return;
+  if (S.insert) {
+    const [s0, s1] = selRange();
+    const del = s1 - s0 > 1 ? Math.min(s1, S.size) - s0 : 0;
+    const at = del ? s0 : S.cursor;
+    sendInsert(at, bytes, del, 'Paste');
+    hint(`Inserted ${fmtInt(bytes.length)} byte${bytes.length === 1 ? '' : 's'}${del ? ` in place of ${fmtInt(del)} selected` : ''}.`);
+    S.cursor = S.anchor = at + bytes.length; scrollToCursor(false); persist();
+    return;
+  }
   const n = Math.min(bytes.length, S.size - S.cursor);
   writeBytes(S.cursor, bytes.subarray(0, n), 'Paste');
   hint(`Pasted ${fmtInt(n)} byte${n === 1 ? '' : 's'} over the bytes at the cursor${n < bytes.length ? ' (the rest did not fit before the end of the file)' : ''}.`);
@@ -646,6 +758,6 @@ window.hexViewerProbe = () => {
     lastRowText: lastRow ? lastRow.textContent : '', blocks: S.blocks.size, match: S.match, findInfo: el.findInfo ? el.findInfo.textContent : '',
     banner: el.banner && !el.banner.hidden ? el.banner.textContent : '', hint: el.stHint ? el.stHint.textContent : '', le: S.le,
     inspector: el.insBody ? [...el.insBody.querySelectorAll('.ir')].map(r => [r.children[0].textContent, r.children[1].textContent]) : [],
-    status: el.status ? el.status.textContent : '',
+    status: el.status ? el.status.textContent : '', insert: S.insert, mode: el.modeBtn ? el.modeBtn.textContent : '',
   };
 };

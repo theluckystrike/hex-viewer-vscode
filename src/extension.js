@@ -7,12 +7,14 @@ const { validateWebviewMessage } = require('./core/protocol');
 const { fmtSize, fmtInt, hexOffset, parseOffset, parsePattern, formatCopy, detectType, COPY_FORMATS } = require('./core/bytes');
 const { createRatingPrompt } = require('./rate');
 const { registerSupport, commandUris, showLinks } = require('./support');
+const { openCompare } = require('./compare');
 
 const VIEW_ANY = 'hexViewer.editor';     // "Open With" for every file
 const VIEW_BIN = 'hexViewer.binary';     // default editor for .bin, .dat, .img, .rom, .dmp, .dump
 const VIEW_TYPES = [VIEW_ANY, VIEW_BIN];
 const EXT_ID = 'zovo.zovo-hex-viewer';
 const MAX_COPY = 32 << 20;
+const MAX_INSERT = 16 << 20;
 let rating = { success() {}, failure() {} };
 
 function settings() {
@@ -146,18 +148,27 @@ class HexEditorProvider {
       showSupportLinks: showLinks(vscode, 'hexViewer'),
     });
     doc.panels.add(panel);
-    const me = { doc, panel, cursor: null };
+    const me = { doc, panel, cursor: null, provider: this };
     let disposed = false, counted = false, searchId = 0;
-    const post = m => (disposed ? Promise.resolve(false) : panel.webview.postMessage(m));
+    const post = m => (disposed ? Promise.resolve(false) : Promise.resolve(panel.webview.postMessage(m)).then(undefined, () => false));
     const setActive = () => { if (panel.active) { this.active = me; this.showStatus(); } else if (this.active === me) { this.active = null; this.showStatus(); } };
     panel.onDidChangeViewState(setActive);
     setActive();
     const cfgSub = vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('hexViewer')) post({ type: 'config', settings: settings() }); });
 
-    panel.webview.onDidReceiveMessage(async raw => {
+    // Messages that change the bytes run one after another, so a cut or a fast series of typed bytes never
+    // sees a half-applied edit. Nothing in this queue waits for the webview (a post to a webview that is still
+    // loading can stay pending). Reads, search and the rest run at once.
+    const EDITS = new Set(['edit', 'delete', 'cut']);
+    let queue = Promise.resolve();
+    panel.webview.onDidReceiveMessage(raw => {
       const v = validateWebviewMessage(raw);
       if (!v.ok) return;
-      const msg = v.msg;
+      if (!EDITS.has(v.msg.type)) return handle(v.msg);
+      queue = queue.then(() => handle(v.msg));
+      return queue;
+    });
+    const handle = async msg => {
       try {
         if (msg.type === 'ready') {
           if (!doc.hex) { rating.failure(); await post({ type: 'init', name, error: doc.error, settings: settings() }); return; }
@@ -166,7 +177,7 @@ class HexEditorProvider {
           await post({
             type: 'init', name, size: doc.hex.size, sizeText: fmtSize(doc.hex.size), fileType: detectType(head),
             readOnly: !writable, readOnlyReason: writable ? '' : 'The file is read-only on disk.', settings: settings(),
-            edited: doc.hex.editedIn(0, Number.MAX_SAFE_INTEGER).slice(0, 200000), copyFormats: COPY_FORMATS,
+            edited: doc.hex.editedIn(0, Number.MAX_SAFE_INTEGER, 200000), copyFormats: COPY_FORMATS,
           });
           return;
         }
@@ -181,23 +192,33 @@ class HexEditorProvider {
         }
         if (msg.type === 'rendered') { if (!counted) { counted = true; rating.success(); } return; }
         if (msg.type === 'cursor') { me.cursor = msg; if (this.active === me) this.showStatus(); return; }
-        if (msg.type === 'gotoPrompt') { await vscode.commands.executeCommand('hexViewer.goToOffset'); return; }
+        // Prompts and dialogs stay open until the user answers; do not hold the message queue for them.
+        if (msg.type === 'gotoPrompt') { vscode.commands.executeCommand('hexViewer.goToOffset').then(undefined, () => {}); return; }
         if (msg.type === 'error') { console.error('[hex-viewer webview]', msg.message); return; }
-        if (msg.type === 'edit') {
-          if (settings().readOnly || !(await hex.writable())) {
-            await post({ type: 'notice', level: 'warn', message: settings().readOnly ? 'Editing is off (setting hexViewer.readOnly).' : 'This file is read-only, so it cannot be edited.' });
-            return;
-          }
-          const rec = await hex.overwrite(msg.offset, msg.values);
-          if (!rec) return;
-          this.sendPatch(doc, rec.offset, rec.after.length);
-          this._onDidChange.fire({
-            document: doc, label: msg.label,
-            undo: () => { hex.apply(rec, true); this.sendPatch(doc, rec.offset, rec.after.length); },
-            redo: () => { hex.apply(rec, false); this.sendPatch(doc, rec.offset, rec.after.length); },
-          });
+        if (msg.type === 'edit' || msg.type === 'delete' || msg.type === 'cut') {
+          // The webview changes its size at once for inserts and deletes; send the real size back when nothing changed.
+          const sizes = msg.type !== 'edit' || msg.mode === 'insert';
+          const keep = () => { if (sizes) post({ type: 'resized', size: hex.size, sizeText: fmtSize(hex.size), edited: hex.editedIn(0, Number.MAX_SAFE_INTEGER, 200000) }); };
+          if (!(await this.canEdit(doc, post))) { keep(); return; }
+          let rec;
+          if (msg.type === 'cut') {
+            const n = Math.min(msg.end, hex.size) - msg.start;
+            if (n <= 0) { keep(); return; }
+            if (n > MAX_COPY) { keep(); post({ type: 'notice', level: 'warn', message: `The selection is ${fmtSize(n)}. Cut works up to ${fmtSize(MAX_COPY)}. To remove more, press Delete.` }); return; }
+            const bytes = await hex.read(msg.start, n);
+            await vscode.env.clipboard.writeText(formatCopy(bytes, msg.format, name.replace(/\.[^.]*$/, '')));
+            rec = hex.delete(msg.start, msg.start + n);
+            post({ type: 'copied', text: `Cut ${fmtInt(n)} byte${n === 1 ? '' : 's'}. Ctrl+Z puts them back.` });
+          } else if (msg.type === 'delete') rec = hex.delete(msg.start, msg.end);
+          else if (msg.mode === 'insert') rec = msg.deleteCount ? hex.replace(msg.offset, msg.offset + msg.deleteCount, msg.values) : hex.insert(msg.offset, msg.values);
+          else if (msg.merge && this.mergeTyped(doc, msg.offset, msg.values[0])) return;
+          else rec = await hex.overwrite(msg.offset, msg.values);
+          if (!rec) { keep(); return; }
+          this.commit(doc, rec, msg.type === 'cut' ? 'Cut' : msg.label);
           return;
         }
+        if (msg.type === 'insertPrompt') { vscode.commands.executeCommand('hexViewer.insertBytes').then(undefined, () => {}); return; }
+        if (msg.type === 'compareWith') { vscode.commands.executeCommand('hexViewer.compare', doc.uri).then(undefined, e => vscode.window.showErrorMessage(errorText(e))); return; }
         if (msg.type === 'copy') {
           const n = Math.min(msg.end, hex.size) - msg.start;
           if (n <= 0) return;
@@ -220,12 +241,52 @@ class HexEditorProvider {
           await post({ type: 'searchResult', id, offset: r.offset, length: p.bytes.length, wrapped: !!r.wrapped, cancelled: !!r.cancelled, ms: Date.now() - t0 });
         }
       } catch (e) {
-        await post({ type: 'notice', level: 'error', message: errorText(e) });
+        post({ type: 'notice', level: 'error', message: errorText(e) });
       }
-    });
+    };
     panel.onDidDispose(() => {
       disposed = true; cfgSub.dispose(); doc.panels.delete(panel);
       if (this.active === me) { this.active = null; this.showStatus(); }
+    });
+  }
+
+  async canEdit(doc, post) {
+    if (settings().readOnly || !(await doc.hex.writable())) {
+      post({ type: 'notice', level: 'warn', message: settings().readOnly ? 'Editing is off (setting hexViewer.readOnly).' : 'This file is read-only, so it cannot be edited.' });
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Insert mode types a byte in two steps: the first hex digit inserts it, the second sets its low half.
+   * When the insert is still the last edit, the second digit changes that insert, so one typed byte is one undo step.
+   */
+  mergeTyped(doc, offset, value) {
+    const rec = doc.lastRec;
+    if (!rec || rec.kind !== 'insert' || rec.offset !== offset || rec.after.length !== 1 || rec.gen !== doc.hex.gen) return false;
+    const b = Uint8Array.of(value);
+    const piece = { src: b, start: 0, len: 1 };
+    doc.hex._splice(offset, 1, [piece]);
+    rec.inserted = [piece]; rec.after = b;
+    this.sendPatch(doc, offset, 1);
+    return true;
+  }
+
+  /** Tell the views about an applied edit record and put it on VS Code's undo stack. */
+  commit(doc, rec, label) {
+    const hex = doc.hex;
+    doc.lastRec = rec;
+    const show = () => {
+      if (rec.kind === 'overwrite') this.sendPatch(doc, rec.offset, rec.after.length);
+      else doc.post({ type: 'resized', size: hex.size, sizeText: fmtSize(hex.size), edited: hex.editedIn(0, Number.MAX_SAFE_INTEGER, 200000) });
+      if (this.active && this.active.doc === doc) this.showStatus();
+    };
+    show();
+    this._onDidChange.fire({
+      document: doc, label,
+      undo: () => { doc.lastRec = null; hex.apply(rec, true); show(); },
+      redo: () => { doc.lastRec = null; hex.apply(rec, false); show(); },
     });
   }
 
@@ -246,7 +307,9 @@ class HexEditorProvider {
   async saveCustomDocument(doc) {
     if (!doc.hex) return;
     doc.savingUntil = Date.now() + 1500;
-    await doc.hex.save();
+    const big = doc.hex.size > (64 << 20);
+    if (big) await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `Hex Viewer: saving ${path.posix.basename(doc.uri.path)}` }, () => doc.hex.save());
+    else await doc.hex.save();
     doc.savingUntil = Date.now() + 1500;
     doc.post({ type: 'saved' });
   }
@@ -267,7 +330,7 @@ class HexEditorProvider {
 
   async backupCustomDocument(doc, ctx) {
     const dest = ctx.destination;
-    await vscode.workspace.fs.writeFile(dest, Buffer.from(doc.hex ? doc.hex.backupJson() : '{}', 'utf8'));
+    await vscode.workspace.fs.writeFile(dest, Buffer.from(doc.hex ? await doc.hex.backupJson() : '{}', 'utf8'));
     return { id: dest.toString(), delete: async () => { try { await vscode.workspace.fs.delete(dest); } catch {} } };
   }
 }
@@ -288,6 +351,36 @@ function sameFileTab(uri) {
     return vscode.window.tabGroups.activeTabGroup.tabs.find(t => t.input && t.input.uri && t.input.uri.toString() === key
       && !(typeof t.input.viewType === 'string' && /^hexViewer\./.test(t.input.viewType)));
   } catch { return undefined; }
+}
+
+/** "16", "0x100 FF", "4 x 00": a count and an optional fill byte. */
+function parseInsert(s) {
+  const m = /^\s*(0x[0-9a-f]+|\d+)\s*(?:(?:x|of|with|\*)\s*)?(?:(?:0x)?([0-9a-f]{1,2}))?\s*$/i.exec(s || '');
+  if (!m) return { ok: false, error: 'Type a count, then an optional fill byte in hex: 16, 0x100 FF or 4 x 00.' };
+  const n = m[1].toLowerCase().startsWith('0x') ? parseInt(m[1], 16) : parseInt(m[1], 10);
+  if (!(n >= 1)) return { ok: false, error: 'The count must be 1 or more.' };
+  if (n > MAX_INSERT) return { ok: false, error: `Insert up to ${fmtInt(MAX_INSERT)} bytes at a time.` };
+  return { ok: true, count: n, fill: m[2] ? parseInt(m[2], 16) : 0 };
+}
+
+async function insertBytes(shared) {
+  const a = shared.active;
+  const provider = a && a.provider;
+  if (!a || !a.doc.hex) { vscode.window.showInformationMessage('Open a file in Hex Viewer first.'); return; }
+  const hex = a.doc.hex;
+  if (!(await provider.canEdit(a.doc, m => a.panel.webview.postMessage(m)))) return;
+  const at = Math.min(hex.size, (a.cursor && a.cursor.offset) || 0);
+  const input = await vscode.window.showInputBox({
+    title: 'Insert bytes',
+    prompt: `Bytes to insert before offset 0x${hexOffset(at, 1)} (${fmtInt(at)}): a count and an optional fill byte, like 16, 0x100 FF or 4 x 00. To add bytes at the end, put the cursor past the last byte in insert mode.`,
+    placeHolder: '16 00',
+    validateInput: v => { const r = parseInsert(v); return r.ok ? null : r.error; },
+  });
+  if (input === undefined) return;
+  const r = parseInsert(input);
+  if (!r.ok) return;
+  const rec = hex.insert(at, new Uint8Array(r.count).fill(r.fill));
+  if (rec) provider.commit(a.doc, rec, 'Insert bytes');
 }
 
 async function goToOffset(shared) {
@@ -346,6 +439,9 @@ function activate(context) {
       }
     }),
     vscode.commands.registerCommand('hexViewer.goToOffset', () => goToOffset(shared)),
+    vscode.commands.registerCommand('hexViewer.insertBytes', () => insertBytes(shared)),
+    vscode.commands.registerCommand('hexViewer.toggleInsert', () => post({ type: 'toggleInsert' })),
+    vscode.commands.registerCommand('hexViewer.compare', (uri, uris) => openCompare(context, uri, uris, activeUri)),
     vscode.commands.registerCommand('hexViewer.find', () => post({ type: 'find' })),
     vscode.commands.registerCommand('hexViewer.findNext', () => post({ type: 'findNext', backward: false })),
     vscode.commands.registerCommand('hexViewer.findPrevious', () => post({ type: 'findNext', backward: true })),
@@ -354,4 +450,4 @@ function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, HexEditorProvider, VIEW_ANY, VIEW_BIN, errorText, settings };
+module.exports = { activate, deactivate, HexEditorProvider, VIEW_ANY, VIEW_BIN, errorText, settings, parseInsert };

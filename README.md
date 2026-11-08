@@ -4,7 +4,7 @@
 ![Works offline](https://img.shields.io/badge/network-none-green)
 ![Any file size](https://img.shields.io/badge/files-4%20GB%2B-orange)
 
-Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, from a 0-byte file to a 4 GB disk image, with go to offset, search, a data inspector and copy as hex, C array, Python bytes or base64.
+Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, from a 0-byte file to a 4 GB disk image. Insert and delete bytes, compare two files byte by byte, go to an offset, search, read values in the data inspector and copy as hex, C array, Python bytes or base64.
 
 ![A PNG file open in Hex Viewer inside VS Code. Bytes 0x10 to 0x13 of the IHDR chunk are selected, and the data inspector on the right reads them as big-endian uint32 1400, the image width. The toolbar has Go to offset, Find with Hex, Text and UTF-16 modes, bytes per row, the text encoding and Copy as. The status line shows the offset, the selection, PNG image, 134.5 KB and Overwrite.](https://github.com/theluckystrike/hex-viewer-vscode/raw/HEAD/images/hex-viewer-png.png)
 
@@ -12,7 +12,8 @@ Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, 
 
 - Big files open at once. Only the rows on screen are read, in 64 KB pieces. In the release check a 4 GB file opened in 0.6 s, Ctrl+End went to its last byte, and the extension host used 127 MB.
 - You can get anywhere. Go to an offset in hex or decimal, or jump by `+0x100` or `-16`. Find hex bytes with `??` wildcards, text, or UTF-16 text. The status bar shows the offset of the cursor.
-- Editing stays put. Type two hex digits to overwrite a byte; the cursor moves one byte and stops. Each byte is one undo step. Save writes only the changed bytes.
+- Editing stays put. Type two hex digits to overwrite a byte, or press Insert to add bytes. Delete, cut and paste work on any selection. Every step can be undone.
+- Compare two files. Select two files in the Explorer and pick "Compare in Hex Viewer". F7 jumps to the next difference, also in two 4 GB files.
 
 ## Quick start
 
@@ -62,11 +63,22 @@ Click "Little-endian" to switch to big-endian. In the release check, the values 
 
 ![edit-me.bin after typing AB CD 12 at offset 0x10. The three edited bytes are colored and the tab shows unsaved changes.](https://github.com/theluckystrike/hex-viewer-vscode/raw/HEAD/images/edited-3-bytes.png)
 
-- Type hex digits in the hex column, or characters in the text column, to overwrite bytes. Edited bytes are colored until you save.
-- Paste hex (`4A 5B 00`, `0x4A, 0x5B` or `\x4a\x5b`) with Ctrl+V to overwrite from the cursor.
-- Ctrl+Z undoes one byte, Ctrl+Shift+Z redoes, and Ctrl+S saves. Save writes only the changed bytes into the file, so it is fast on a 4 GB file. Save As writes a full copy.
-- Overwrite only: bytes are not inserted or deleted, so the file size does not change.
+- Type hex digits in the hex column, or characters in the text column. New bytes are colored until you save.
+- Overwrite or insert. The status line shows the mode; press Insert or click the mode to switch. In insert mode, typed and pasted bytes go in before the cursor and the file grows. The cursor can sit one place past the last byte, to add bytes at the end.
+- Delete removes the selected bytes, or the byte at the cursor. In insert mode Backspace removes the byte before the cursor. Ctrl+X cuts (copies, then removes) the selection.
+- Paste hex (`4A 5B 00`, `0x4A, 0x5B` or `\x4a\x5b`) with Ctrl+V. In insert mode a paste replaces the selection.
+- "Hex Viewer: Insert Bytes..." adds a run of bytes at the cursor, such as `16`, `0x100 FF` or `4 x 00`.
+- Ctrl+Z undoes, Ctrl+Shift+Z redoes, and Ctrl+S saves. Inserting into or deleting from a 4 GB file takes no time, because only a list of changes is kept until you save.
+- Safe save. If the size stays the same, only the changed bytes are written, so a save on a 4 GB file is fast. If the size changes, Hex Viewer writes a new copy in the same folder and then puts it in place of the old file, so a full disk or a crash never leaves a half-written file. Before that, it checks the free disk space and says how much it needs. A symbolic link stays a link. Save As writes a full copy.
 - Read-only files open as view only. Set `hexViewer.readOnly` to turn editing off for every file.
+
+## Compare two files
+
+- Select two files in the Explorer, right-click and pick "Compare in Hex Viewer". With one file, the command asks for the second one. The "Compare..." button in the viewer toolbar compares the open file with another.
+- The two files show side by side with one offset column. Differing bytes are colored in both. Bytes past the end of the shorter file count as different.
+- F7 goes to the next difference and Shift+F7 to the previous one (also the buttons in the toolbar). A run of differing bytes counts as one area, so F7 skips to the next area.
+- The toolbar counts every differing byte and area, and the scroll bar marks where they are. In the release check, two 4 GB files with one differing byte 64 bytes from the end were counted in 2.1 s (VS Code 1.90.2 on an Apple silicon Mac), with the extension host at 96 MB.
+- The compare reads the files as saved on disk, 1 MB at a time from each file.
 
 ## Display
 

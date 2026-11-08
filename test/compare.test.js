@@ -78,16 +78,3 @@ test('compare panel message checks', () => {
   assert.equal(validate({ type: 'nope' }), null);
   assert.equal(validate(null), null);
 });
-
-test('readInto: clean file, edited document and the end of the file', async () => {
-  const f = path.join(tmp, 'ri.bin'); fs.writeFileSync(f, Buffer.from('0123456789'));
-  const d = await HexDocument.openFile(f);
-  const buf = Buffer.alloc(8);
-  assert.equal(await d.readInto(6, 8, buf), 4);
-  assert.equal(buf.subarray(0, 4).toString(), '6789');
-  d.insert(0, Buffer.from('AB'));
-  assert.equal(await d.readInto(0, 8, buf), 8);
-  assert.equal(buf.toString(), 'AB012345');
-  assert.equal(await d.readInto(99, 8, buf), 0);
-  await d.dispose();
-});

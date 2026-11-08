@@ -161,28 +161,6 @@ class HexDocument {
     return out;
   }
 
-  /**
-   * Read [offset, offset+length) into `buf` (reused by long scans such as compare, so they make no garbage).
-   * Returns the number of bytes read.
-   */
-  async readInto(offset, length, buf) {
-    const len = Math.max(0, Math.min(length, this.size - offset, buf.length));
-    if (len <= 0) return 0;
-    if (!this.dirty && this.source instanceof FileSource) {
-      const fh = await this.source.handle();
-      let got = 0;
-      while (got < len) {
-        const { bytesRead } = await fh.read(buf, got, len - got, offset + got);
-        if (!bytesRead) break;
-        got += bytesRead;
-      }
-      return got;
-    }
-    const b = await this.read(offset, len);
-    buf.set(b, 0);
-    return b.length;
-  }
-
   /** Offsets in [offset, offset+length) that hold new bytes (typed, pasted, inserted, or put back by undo after a save). */
   editedIn(offset, length, limit = 1 << 20) {
     const out = [];

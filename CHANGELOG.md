@@ -1,9 +1,5 @@
 # Changelog
 
-## 0.1.1 (2026-11-08)
-
-- Listing name and short description only: "Hex Viewer & Binary Viewer, Hex Editor". No code change.
-
 ## 0.1.0 (2026-11-08)
 
 First release.

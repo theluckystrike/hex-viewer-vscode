@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="#16202B"/>
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="none" stroke="#2F4A63" stroke-width="4"/>
+  <g font-family="Menlo, DejaVu Sans Mono, monospace" font-weight="700">
+    <text x="128" y="112" font-size="84" fill="#4FC1FF" text-anchor="middle">0x</text>
+    <text x="128" y="160" font-size="30" fill="#9CDCFE" text-anchor="middle">4A 5B C3 0F</text>
+    <text x="128" y="196" font-size="30" fill="#6A9955" text-anchor="middle">7F 45 4C 46</text>
+  </g>
+  <rect x="80" y="137" width="42" height="30" rx="5" fill="none" stroke="#FFD166" stroke-width="4"/>
+</svg>

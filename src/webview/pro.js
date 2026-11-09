@@ -82,7 +82,8 @@ export function createProUI(api) {
       const key = pathArr.join('.');
       const kids = n.c || [];
       const isOpen = P.open.has(key);
-      const row = $('div', { class: 'tn' + (sameSel(pathArr) ? ' on' : '') + (n.e ? ' bad' : ''), role: 'treeitem', 'aria-level': String(depth + 1), 'aria-expanded': kids.length ? String(isOpen) : null, tabindex: '-1', style: `padding-left:${depth * 12 + 4}px`, title: `${n.t} at 0x${hexOffset(n.o, 1)}, ${fmtInt(n.s)} byte${n.s === 1 ? '' : 's'}${n.m ? '\n' + n.m : ''}${n.e ? '\n' + n.e : ''}` });
+      const row = $('div', { class: 'tn' + (sameSel(pathArr) ? ' on' : '') + (n.e ? ' bad' : ''), role: 'treeitem', 'aria-level': String(depth + 1), 'aria-expanded': kids.length ? String(isOpen) : null, tabindex: '-1', title: `${n.t} at 0x${hexOffset(n.o, 1)}, ${fmtInt(n.s)} byte${n.s === 1 ? '' : 's'}${n.m ? '\n' + n.m : ''}${n.e ? '\n' + n.e : ''}` });
+      row.style.paddingLeft = `${depth * 12 + 4}px`; // CSSOM, allowed by the webview CSP (a style attribute is not)
       row.append($('span', { class: 'tw', text: kids.length ? (isOpen ? '▾' : '▸') : ' ' }), $('span', { class: 'nm', text: n.n }));
       if (n.l) row.append($('span', { class: 'lb', text: n.l }));
       if (n.v !== undefined) row.append($('span', { class: 'vl' + (n.x ? ' cx' : ''), text: n.v }));
@@ -97,12 +98,13 @@ export function createProUI(api) {
       if (kids.length && isOpen) {
         const shown = Math.min(kids.length, P.more && P.more[key] ? P.more[key] : LIMIT);
         for (let i = 0; i < shown; i++) add(kids[i], [...pathArr, i], depth + 1);
-        if (shown < kids.length) list.append($('button', { class: 'link more', style: `margin-left:${(depth + 1) * 12 + 4}px`, text: `Show ${fmtInt(Math.min(LIMIT, kids.length - shown))} more of ${fmtInt(kids.length)}`, onclick: () => { P.more = P.more || {}; P.more[key] = shown + LIMIT; drawStruct(); } }));
+        if (shown < kids.length) list.append(indent($('button', { class: 'link more', text: `Show ${fmtInt(Math.min(LIMIT, kids.length - shown))} more of ${fmtInt(kids.length)}`, onclick: () => { P.more = P.more || {}; P.more[key] = shown + LIMIT; drawStruct(); } }), (depth + 1) * 12 + 4));
       }
     };
     add(P.tree, [], 0);
     box.append(list);
   }
+  const indent = (e, px) => { e.style.marginLeft = px + 'px'; return e; };
   const sameSel = p => P.selPath && P.selPath.length === p.length && P.selPath.every((v, i) => v === p[i]);
   function toggle(key) { if (P.open.has(key)) P.open.delete(key); else P.open.add(key); drawStruct(); }
   function selNode() {

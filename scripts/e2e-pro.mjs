@@ -308,6 +308,9 @@ try {
   R.memory.push({ step: 'end', mem: extHostMB() });
   R.console = vs.console.filter(c => !/copilot|CloudSandboxApi|LESS API|reading 'selection'|ERR_FILE_NOT_FOUND.*product/i.test(c.text));
   R.extErrors = R.console.filter(c => /hex-viewer|hexViewer|custom document|zovo/i.test(c.text));
+  // a CSP refusal for our own webview resources counts as an extension error
+  R.cspErrors = R.console.filter(c => /Content Security Policy/.test(c.text) && /PRO1-work|zovo/i.test(c.text));
+  R.extErrors.push(...R.cspErrors);
   R.logErrors = [];
   for (const f of vs.extHostLogs()) { const t = fs.readFileSync(f, 'utf8'); for (const l of t.split('\n')) if (/\[error\]/.test(l) && /hex|zovo/i.test(l)) R.logErrors.push(l.slice(0, 300)); }
   await vs.close();

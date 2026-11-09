@@ -9,6 +9,10 @@ const KEYS = require('./keys');
 
 const SKU = 'hex-pro';
 const SECRET = 'zovo.license.' + SKU;
+// Try before buying: each Pro feature works this many times on this computer without a key (a local counter,
+// no network, no timer). After that a click explains the feature and offers Get Pro and Enter key.
+const TRIAL_USES = 3;
+const TRIAL_KEY = 'hexViewer.proTrial';
 
 const FEATURES = {
   templates: {
@@ -22,6 +26,10 @@ const FEATURES = {
   report: {
     title: 'Compare report export',
     detail: 'Hex Viewer Pro writes every differing range of the two files to a text, CSV or JSON report, with offsets, lengths and the bytes on both sides. Works on 4 GB and larger files.',
+  },
+  checksums: {
+    title: 'Checksums',
+    detail: 'Hex Viewer Pro computes CRC-32, Adler-32, MD5, SHA-1, SHA-256 and SHA-512 of the selection or the whole file in one pass, 4 GB files included. Click a value to copy it.',
   },
   findInFiles: {
     title: 'Find bytes in many files',
@@ -95,17 +103,43 @@ function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex V
     return true;
   }
 
-  /** True when licensed. Otherwise explains the feature (modal, only because the user clicked it) and offers both ways in. */
-  async function gate(feature) {
-    if (state.licensed) return true;
+  const trialUsed = feature => Number((context.globalState.get(TRIAL_KEY) || {})[feature]) || 0;
+  const trialLeft = feature => (FEATURES[feature] ? Math.max(0, TRIAL_USES - trialUsed(feature)) : 0);
+  const trials = () => Object.fromEntries(Object.keys(FEATURES).map(f => [f, trialLeft(f)]));
+  async function useTrial(feature) {
+    const m = { ...(context.globalState.get(TRIAL_KEY) || {}) };
+    m[feature] = trialUsed(feature) + 1;
+    await context.globalState.update(TRIAL_KEY, m);
+    emitter.fire(state.licensed);
+  }
+
+  /** Explain a Pro feature (modal, only after the user clicked it) and offer both ways in. */
+  async function explain(feature) {
     const f = FEATURES[feature] || { title: 'This feature', detail: '' };
+    const tried = trialUsed(feature) >= TRIAL_USES ? `You have used the ${TRIAL_USES} free tries of this feature on this computer.\n\n` : '';
     const pick = await vscode.window.showInformationMessage(`${f.title} is part of ${productName} Pro`, {
       modal: true,
-      detail: `${f.detail}\n\nEverything else in ${productName} stays free: viewing, find, go to offset, the data inspector, editing, insert and delete, and compare. Your key is checked on this computer; nothing is sent.`,
+      detail: `${tried}${f.detail}\n\nEverything else in ${productName} stays free: viewing, find, go to offset, the data inspector, editing, insert and delete, and compare. Your key is checked on this computer; nothing is sent.`,
     }, 'Get Pro', 'Enter Key');
     if (pick === 'Get Pro') { await getPro(); return false; }
     if (pick === 'Enter Key') return enterKey();
     return false;
+  }
+
+  /**
+   * True when the user may run the feature now: licensed, or a free try is left (it is used up here).
+   * Otherwise the explanation shows. trial: false to skip the free tries (for buttons that only explain).
+   */
+  async function gate(feature, opts = {}) {
+    if (state.licensed) return true;
+    if (opts.trial !== false && trialLeft(feature) > 0) {
+      await useTrial(feature);
+      const left = trialLeft(feature);
+      const f = FEATURES[feature];
+      vscode.window.setStatusBarMessage(`${productName} Pro: free try of ${f ? f.title.toLowerCase() : 'this feature'}, ${left} left on this computer.`, 6000);
+      return true;
+    }
+    return explain(feature);
   }
 
   context.subscriptions.push(
@@ -120,7 +154,9 @@ function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex V
 
   return {
     get licensed() { return state.licensed; },
-    ready, gate, getPro, enterKey, removeKey, load,
+    ready, gate, explain, getPro, enterKey, removeKey, load, trialLeft, trials, useTrial,
+    /** Licensed or a free try left: the caller asks its questions first and calls useTrial() when the action runs. */
+    async allowed(feature) { if (state.licensed || trialLeft(feature) > 0) return true; await explain(feature); return false; },
     onDidChange: emitter.event,
     features: FEATURES,
     get onSale() { return !!keys.PAYMENT_URL; },

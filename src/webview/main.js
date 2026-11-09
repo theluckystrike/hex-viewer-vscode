@@ -177,7 +177,8 @@ function init(m) {
   el.grid.append(el.view);
   el.leBtn = $('button', { class: 'link', title: 'Switch byte order', onclick: () => { S.le = !S.le; saved.le = S.le; persist(); renderInspector(); } });
   el.insBody = $('div', { class: 'ins' });
-  el.insPane = $('div', { class: 'pane', role: 'tabpanel' }, $('h2', {}, 'Data inspector ', el.leBtn), el.insBody);
+  el.sumBtn = $('button', { class: 'withpro', title: 'CRC-32, Adler-32, MD5, SHA-1, SHA-256 and SHA-512 of the selection, or of the whole file when nothing is selected (Hex Viewer Pro)', text: 'Checksums...', onclick: () => post({ type: 'checksums' }) }, $('span', { class: 'pro', 'aria-label': 'Pro feature', text: 'PRO' }));
+  el.insPane = $('div', { class: 'pane', role: 'tabpanel' }, $('h2', {}, 'Data inspector ', el.leBtn), el.insBody, $('div', { class: 'phead sumrow' }, el.sumBtn));
   proUI = createProUI({ $, post, S, el, render, selectRange, hint, esc, hexOffset, fmtInt, saved, persist, layout });
   el.side = $('aside', { class: 'side', 'aria-label': 'Side panel', hidden: !S.inspector }, proUI.tabs, el.insPane, ...proUI.panes);
   el.main = $('div', { class: 'main' }, el.grid, el.side);

@@ -8,6 +8,7 @@ const { BUILTIN } = require('./templates');
 const { BookmarkStore } = require('./core/bookmarks');
 const { writeReport } = require('./core/report');
 const { searchFiles } = require('./core/multisearch');
+const { checksums } = require('./core/checksum');
 const { parsePattern, hexOffset, fmtInt, fmtSize, hex2 } = require('./core/bytes');
 
 const MAX_TEMPLATE_FILES = 200;
@@ -87,11 +88,12 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   async function sendInfo(me, post) {
     const { found, pick } = await detectFor(me);
     const u = loadUserTemplates();
-    await post({ type: 'structInfo', licensed: pro.licensed, onSale: pro.onSale, best: pick ? { id: pick.id, name: pick.name } : null, matches: found.map(f => f.template.id), count: allTemplates().length, problems: u.problems.slice(0, 5) });
+    await post({ type: 'structInfo', licensed: pro.licensed, onSale: pro.onSale, trials: pro.trials(), structTrial: !!me.structTrial, best: pick ? { id: pick.id, name: pick.name } : null, matches: found.map(f => f.template.id), count: allTemplates().length, problems: u.problems.slice(0, 5) });
   }
 
   async function parseFor(me, post, id) {
-    if (!pro.licensed) { await post({ type: 'struct', locked: true }); return; }
+    // a free try opens the Structure view of this tab; edits and template changes in the same tab are part of it
+    if (!pro.licensed && !me.structTrial) { await post({ type: 'struct', locked: true, trial: pro.trialLeft('templates') }); return; }
     const run = me.structRun = (me.structRun || 0) + 1;
     const t = id ? byId(id) : (await detectFor(me)).pick;
     if (!t) { await post({ type: 'struct', none: true, count: allTemplates().length }); return; }
@@ -103,7 +105,8 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   }
 
   async function pickTemplate(me, post) {
-    if (!(await pro.gate('templates'))) return;
+    if (!me.structTrial && !(await pro.gate('templates'))) return;
+    if (!pro.licensed) me.structTrial = true;
     const { found } = await detectFor(me);
     const matches = new Set(found.map(f => f.template.id));
     const items = allTemplates().map(t => ({ label: t.name, description: (matches.has(t.id) ? 'matches this file' : '') + (t.source ? (matches.has(t.id) ? ', ' : '') + 'your template' : ''), detail: t.source || (t.extensions || []).map(e => '.' + e).join(' '), id: t.id }))
@@ -123,7 +126,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   }
 
   async function exportStruct(me, format, idx) {
-    if (!(await pro.gate('templates'))) return;
+    if (!me.structTrial && !(await pro.gate('templates'))) return;
     if (!me.struct) { vscode.window.showInformationMessage('Open the Structure view first, so there is a parsed structure to export.'); return; }
     const node = nodeAt(me.struct.result.root, idx) || me.struct.result.root;
     const name = path.posix.basename(me.doc.uri.path);
@@ -136,7 +139,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
 
   const bmKey = doc => doc.uri.toString();
   function broadcastBookmarks(doc) {
-    doc.post({ type: 'bookmarks', list: bookmarks.list(bmKey(doc)), licensed: pro.licensed });
+    doc.post({ type: 'bookmarks', list: bookmarks.list(bmKey(doc)), licensed: pro.licensed, trial: pro.trialLeft('bookmarks') });
   }
 
   async function askLabel(title, value, start, end) {
@@ -155,7 +158,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   }
 
   async function addBookmark(me, start, end) {
-    if (!(await pro.gate('bookmarks'))) return;
+    if (!(await pro.allowed('bookmarks'))) return;
     const size = me.doc.hex.size;
     start = Math.max(0, Math.min(start, Math.max(0, size - 1)));
     end = Math.max(start + 1, Math.min(end, size));
@@ -165,12 +168,13 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     if (note === undefined) return;
     try { bookmarks.add(bmKey(me.doc), { start, end, label, note, color: 'yellow' }); }
     catch (e) { vscode.window.showWarningMessage(e.message); return; }
+    if (!pro.licensed) await pro.useTrial('bookmarks');
     await saveBookmarks();
     broadcastBookmarks(me.doc);
   }
 
+  // Bookmarks you have are yours: viewing, jumping, editing and removing them never needs Pro.
   async function editBookmark(me, id) {
-    if (!(await pro.gate('bookmarks'))) return;
     const b = bookmarks.list(bmKey(me.doc)).find(x => x.id === id);
     if (!b) return;
     const what = await vscode.window.showQuickPick([
@@ -195,22 +199,27 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
 
   // ---------- messages from the viewer ----------
 
-  const TYPES = new Set(['proState', 'proGet', 'proKey', 'proExplain', 'structDetect', 'structParse', 'structPick', 'structExport', 'bmList', 'bmAdd', 'bmEdit', 'bmRemove', 'bmExport']);
+  const TYPES = new Set(['checksums', 'proState', 'proGet', 'proKey', 'proExplain', 'proTry', 'structDetect', 'structParse', 'structPick', 'structExport', 'bmList', 'bmAdd', 'bmEdit', 'bmRemove', 'bmExport']);
   async function handle(me, msg, post) {
     switch (msg.type) {
-      case 'proState': return post({ type: 'pro', licensed: pro.licensed, onSale: pro.onSale });
+      case 'proState': return post({ type: 'pro', licensed: pro.licensed, onSale: pro.onSale, trials: pro.trials() });
+      case 'proTry':
+        if (msg.feature === 'templates') { if (pro.licensed || me.structTrial || (await pro.gate('templates'))) { if (!pro.licensed) me.structTrial = true; await sendInfo(me, post); return parseFor(me, post); } return; }
+        if (msg.feature === 'bookmarks') { const c = me.cursor || { selStart: 0, selEnd: 1 }; return addBookmark(me, c.selStart, Math.max(c.selEnd, c.selStart + 1)); }
+        return;
       case 'proGet': return pro.getPro();
       case 'proKey': return pro.enterKey();
-      case 'proExplain': return pro.gate(msg.feature);
+      case 'proExplain': return pro.explain(msg.feature);
       case 'structDetect': return sendInfo(me, post);
       case 'structParse': return parseFor(me, post, msg.id);
       case 'structPick': return pickTemplate(me, post);
       case 'structExport': return exportStruct(me, msg.format, msg.path);
-      case 'bmList': return post({ type: 'bookmarks', list: bookmarks.list(bmKey(me.doc)), licensed: pro.licensed });
+      case 'bmList': return post({ type: 'bookmarks', list: bookmarks.list(bmKey(me.doc)), licensed: pro.licensed, trial: pro.trialLeft('bookmarks') });
       case 'bmAdd': return addBookmark(me, msg.start, msg.end);
       case 'bmEdit': return editBookmark(me, msg.id);
-      case 'bmRemove': if (pro.licensed) { bookmarks.remove(bmKey(me.doc), msg.id); await saveBookmarks(); broadcastBookmarks(me.doc); } return;
+      case 'bmRemove': bookmarks.remove(bmKey(me.doc), msg.id); await saveBookmarks(); broadcastBookmarks(me.doc); return;
       case 'bmExport': return exportBookmarks(me);
+      case 'checksums': return runChecksums(me);
     }
   }
 
@@ -225,7 +234,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   }
 
   async function findInFiles(folderUri) {
-    if (!(await pro.gate('findInFiles'))) return;
+    if (!(await pro.allowed('findInFiles'))) return;
     const modes = [
       { label: 'Hex bytes', description: '4A 5B ?? 00 (?? matches any byte)', mode: 'hex' },
       { label: 'Text', description: 'UTF-8', mode: 'text' },
@@ -257,6 +266,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     const glob = base ? new vscode.RelativePattern(base, include || '**/*') : (include || '**/*');
     const uris = (await vscode.workspace.findFiles(glob, '{**/node_modules/**,**/.git/**}', 20000)).filter(u => u.scheme === 'file');
     if (!uris.length) { vscode.window.showInformationMessage('No files match that pattern.'); return; }
+    if (!pro.licensed) await pro.useTrial('findInFiles');
     const results = [];
     const t0 = Date.now();
     const res = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Hex Viewer: finding "${query.slice(0, 40)}"`, cancellable: true }, async (progress, token) => {
@@ -289,7 +299,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   // ---------- compare report ----------
 
   async function exportReport(a, b, ua, ub) {
-    if (!(await pro.gate('report'))) return;
+    if (!(await pro.allowed('report'))) return;
     const na = path.posix.basename(ua.path), nb = path.posix.basename(ub.path);
     const dir = ua.scheme === 'file' ? path.dirname(ua.fsPath) : undefined;
     const base = `${na.replace(/\.[^.]*$/, '')}-vs-${nb.replace(/\.[^.]*$/, '')}.diff.txt`;
@@ -299,6 +309,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
       filters: { 'Text report': ['txt'], 'CSV (spreadsheet)': ['csv'], 'JSON': ['json'] },
     });
     if (!dest) return;
+    if (!pro.licensed) await pro.useTrial('report');
     const ext = path.extname(dest.path).toLowerCase();
     const format = ext === '.csv' ? 'csv' : ext === '.json' ? 'json' : 'txt';
     const info = { nameA: na, nameB: nb, pathA: ua.scheme === 'file' ? ua.fsPath : ua.toString(), pathB: ub.scheme === 'file' ? ub.fsPath : ub.toString() };
@@ -341,6 +352,28 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     return res;
   }
 
+  // ---------- checksums ----------
+
+  async function runChecksums(me) {
+    if (!(await pro.allowed('checksums'))) return;
+    const c = me.cursor || { selStart: 0, selEnd: 0 };
+    const sel = c.selEnd - c.selStart > 1;
+    const start = sel ? c.selStart : 0, end = sel ? Math.min(c.selEnd, me.doc.hex.size) : me.doc.hex.size;
+    if (!pro.licensed) await pro.useTrial('checksums');
+    const what = sel ? `bytes 0x${hexOffset(start, 1)} to 0x${hexOffset(Math.max(start, end - 1), 1)} (${fmtInt(end - start)} bytes)` : `the whole file (${fmtInt(end)} bytes)`;
+    const run = (shouldStop, progress) => checksums(me.doc.hex, start, end, shouldStop, progress);
+    const r = end - start > (16 << 20)
+      ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Hex Viewer: checksums', cancellable: true }, async (p, token) => {
+        let lastPct = 0;
+        return run(() => token.isCancellationRequested, (done, total) => { const pct = Math.floor((100 * done) / total); if (pct > lastPct) { p.report({ increment: pct - lastPct, message: `${pct}%` }); lastPct = pct; } });
+      })
+      : await run(() => false, () => {});
+    if (r.cancelled) return r;
+    const pick = await vscode.window.showQuickPick(r.results.map(([label, v]) => ({ label, description: v, v })), { title: `Checksums of ${what}. Pick one to copy it.`, matchOnDescription: true });
+    if (pick) { await vscode.env.clipboard.writeText(pick.v); vscode.window.setStatusBarMessage(`${pick.label} copied`, 4000); }
+    return r;
+  }
+
   // ---------- commands ----------
 
   const active = () => shared.active;
@@ -350,13 +383,14 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     vscode.commands.registerCommand('hexViewer.showStructure', () => { const a = active(); if (!a) { vscode.window.showInformationMessage('Open a file in Hex Viewer first.'); return; } postActive({ type: 'showPanel', panel: 'struct' }); }),
     vscode.commands.registerCommand('hexViewer.chooseTemplate', () => { const a = active(); if (!a) { vscode.window.showInformationMessage('Open a file in Hex Viewer first.'); return; } postActive({ type: 'showPanel', panel: 'struct' }); return pickTemplate(a, m => a.panel.webview.postMessage(m)); }),
     vscode.commands.registerCommand('hexViewer.addBookmark', () => { const a = active(); if (!a) { vscode.window.showInformationMessage('Open a file in Hex Viewer first.'); return; } const c = a.cursor || { selStart: 0, selEnd: 1 }; return addBookmark(a, c.selStart, Math.max(c.selEnd, c.selStart + 1)); }),
+    vscode.commands.registerCommand('hexViewer.checksums', () => { const a = active(); if (!a) { vscode.window.showInformationMessage('Open a file in Hex Viewer first.'); return; } return runChecksums(a); }),
     vscode.commands.registerCommand('hexViewer.nextBookmark', () => postActive({ type: 'bmJump', backward: false })),
     vscode.commands.registerCommand('hexViewer.previousBookmark', () => postActive({ type: 'bmJump', backward: true })),
-    pro.onDidChange(() => { for (const d of shared.docs.values()) { d.post({ type: 'pro', licensed: pro.licensed, onSale: pro.onSale }); } }),
+    pro.onDidChange(() => { for (const d of shared.docs.values()) { d.post({ type: 'pro', licensed: pro.licensed, onSale: pro.onSale, trials: pro.trials() }); } }),
     vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('hexViewer.templateFolders')) loadUserTemplates(true); }),
   );
 
-  return { handle, TYPES, findInFiles, exportReport, openAt, bookmarks, allTemplates, loadUserTemplates, parseFor, addBookmark };
+  return { handle, TYPES, findInFiles, exportReport, runChecksums, openAt, bookmarks, allTemplates, loadUserTemplates, parseFor, addBookmark };
 }
 
 module.exports = { createProHost };

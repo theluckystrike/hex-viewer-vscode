@@ -191,6 +191,11 @@
         "icon": "$(search)"
       },
       {
+        "command": "hexViewer.checksums",
+        "title": "Checksums of Selection or File",
+        "category": "Hex Viewer Pro"
+      },
+      {
         "command": "hexViewer.getPro",
         "title": "Get Hex Viewer Pro",
         "category": "Hex Viewer"
@@ -309,6 +314,10 @@
         },
         {
           "command": "hexViewer.previousBookmark",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.checksums",
           "when": "activeCustomEditorId =~ /^hexViewer\\./"
         }
       ]

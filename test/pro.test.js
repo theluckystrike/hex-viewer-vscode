@@ -38,6 +38,16 @@ test('license: a valid key, the bundle key, and pasted text around it', () => {
   assert.equal(verifyKey(k, 'hex-pro', [der]).ok, true);
 });
 
+test('license: the PREFIX.payload.signature layout of the XLSX viewer keys', () => {
+  const k = signKey({ v: 1, product: 'zovo-pro', plan: 'lifetime', expires: null }, PRIV, 'ZPRO1');
+  assert.match(k, /^ZPRO1\./);
+  assert.equal(verifyKey(k, 'hex-pro', [PUB]).ok, true);
+  assert.match(verifyKey(signKey({ product: 'hex-pro', expires: '2020-01-01' }, PRIV, 'ZPRO1'), 'hex-pro', [PUB]).reason, /ended on 2020-01-01/);
+  assert.equal(verifyKey(signKey({ product: 'hex-pro', expires: '2999-01-01' }, PRIV, 'ZPRO1'), 'hex-pro', [PUB]).ok, true);
+  // the prefix is signed: moving the body to another prefix breaks it
+  assert.equal(verifyKey(k.replace(/^ZPRO1/, 'TVPRO1'), 'hex-pro', [PUB]).ok, false);
+});
+
 test('license: tampered, wrong key, wrong product, expired, garbage', () => {
   const k = signKey({ sku: 'hex-pro', iat: 1 }, PRIV);
   const [body, sig] = k.split('.');
@@ -206,6 +216,7 @@ const vscodeMock = {
     showInputBox: async o => { const v = state.inputs.shift(); if (o && o.validateInput && v) { const e = o.validateInput(v); if (e) { state.infos.push('INVALID ' + e); return undefined; } } return v; },
     showQuickPick: async (items) => { const want = state.picks.shift(); return typeof want === 'function' ? want(items) : items[want || 0]; },
     showTextDocument: async () => {},
+    setStatusBarMessage: m => { state.status = m; return { dispose() {} }; },
     showSaveDialog: async () => state.saveTo,
     showOpenDialog: async () => undefined,
     withProgress: async (o, f) => f({ report() {} }, { isCancellationRequested: false }),
@@ -251,13 +262,32 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   assert.equal(v.last('structInfo').licensed, false);
   await v.send({ type: 'structParse' }); await settle();
   assert.equal(v.last('struct').locked, true);
-  // a Pro action explains itself once, with both ways in; Escape changes nothing
+  assert.equal(v.last('struct').trial, 3);
+  // a free try opens the Structure view of this tab, and re-reads after edits do not use more tries
+  await v.send({ type: 'proTry', feature: 'templates' }); await settle(80);
+  assert.equal(v.last('struct').id, 'png');
+  await v.send({ type: 'structParse' }); await settle(80);
+  assert.equal(v.last('struct').id, 'png');
+  assert.equal(state.global.get('hexViewer.proTrial').templates, 1);
+  // bookmarks: 3 free tries, Escape on the name does not use one, the 4th explains Pro with both ways in
   state.modalAnswer = undefined;
+  state.inputs = [undefined];
   await v.send({ type: 'bmAdd', start: 0, end: 4 }); await settle();
+  assert.equal(state.global.get('hexViewer.proTrial').bookmarks, undefined);
+  for (let i = 0; i < 3; i++) { state.inputs = ['try ' + i, '']; await v.send({ type: 'bmAdd', start: i, end: i + 1 }); await settle(); }
+  assert.equal(v.last('bookmarks').list.length, 3);
+  assert.equal(v.last('bookmarks').trial, 0);
+  assert.equal(state.modal.length, 0);
+  await v.send({ type: 'bmAdd', start: 9, end: 10 }); await settle();
   assert.equal(state.modal.length, 1);
   assert.match(state.modal[0].msg, /Bookmarks and notes is part of Hex Viewer Pro/);
   assert.deepEqual(state.modal[0].items, ['Get Pro', 'Enter Key']);
+  assert.match(state.modal[0].detail, /used the 3 free tries/);
   assert.match(state.modal[0].detail, /stays free: viewing, find, go to offset/);
+  // bookmarks made in the free tries stay usable: edit and remove need no key
+  state.picks = [items => items.find(i => i.k === 'remove')];
+  await v.send({ type: 'bmEdit', id: v.last('bookmarks').list[0].id }); await settle();
+  assert.equal(v.last('bookmarks').list.length, 2);
   // free features still answer
   await v.send({ type: 'search', query: '49 48 44 52', mode: 'hex', from: 0, id: 1 }); await settle(80);
   assert.equal(v.last('searchResult').offset, 12);
@@ -376,10 +406,26 @@ test('host (licensed): the compare report is written next to the files, then ren
   await a.dispose(); await b.dispose();
 });
 
+test('host (licensed): checksums of the selection and of the whole file', async () => {
+  const f = path.join(tmp, 'sum.bin'); fs.writeFileSync(f, Buffer.from('The quick brown fox jumps over the lazy dog'));
+  const v = await open(f);
+  state.picks = [items => items.find(i => i.label === 'SHA-256')];
+  await v.send({ type: 'checksums' }); await settle(50);
+  assert.equal(state.status, 'SHA-256 copied');
+  const r = await ext.getProHost().runChecksums({ doc: v.doc, cursor: { selStart: 0, selEnd: 0 } });
+  assert.deepEqual(r.results[0], ['CRC-32', '414FA339']);
+  assert.deepEqual(r.results[1], ['Adler-32', '5BDC0FDA']);
+  assert.equal(r.results[4][1], 'D7A8FBB307D7809469CA9ABCB0082E4F8D5651E46D3CDB762D02D0BF37C9E592');
+  const part = await ext.getProHost().runChecksums({ doc: v.doc, cursor: { selStart: 4, selEnd: 9 } });
+  assert.equal(part.bytes, 5);
+  assert.equal(part.results[2][1], crypto.createHash('md5').update('quick').digest('hex').toUpperCase());
+});
+
 test('host: removing the key locks Pro again', async () => {
   await state.commands.get('hexViewer.removeLicenseKey')();
   assert.equal(state.secrets.size, 0);
   state.modal = []; state.modalAnswer = undefined;
+  state.global.set('hexViewer.proTrial', { report: 3 });
   const fa = path.join(tmp, 'ra.bin');
   const a = await HexDocument.openFile(fa);
   const res = await ext.getProHost().exportReport(a, a, uriOf(fa), uriOf(fa));

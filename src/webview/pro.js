@@ -29,7 +29,7 @@ export function createProUI(api) {
     u.struct.hidden = id !== 'struct';
     u.bm.hidden = id !== 'bm';
     if (byUser && el.side.hidden) { S.inspector = true; el.side.hidden = false; el.insBtn.setAttribute('aria-pressed', 'true'); persist(); api.layout(); }
-    if (id === 'struct') { if (!P.info) post({ type: 'structDetect' }); if (P.licensed && !P.tree && !P.busy) parse(); drawStruct(); }
+    if (id === 'struct') { if (!P.info) post({ type: 'structDetect' }); if ((P.licensed || P.structTrial) && !P.tree && !P.busy) parse(); drawStruct(); }
     if (id === 'bm') { post({ type: 'bmList' }); drawBookmarks(); }
     render();
   }
@@ -39,8 +39,10 @@ export function createProUI(api) {
     const card = $('div', { class: 'locked' }, $('h3', {}, title, badge()));
     for (const l of lines) if (l) card.append($('p', { text: l }));
     card.append($('p', { class: 'free', text: 'Everything you use today stays free: viewing, find, go to offset, the data inspector, editing and compare.' }));
+    const left = P.trials ? P.trials[feature] || 0 : 0;
+    if (left > 0) card.append($('div', { class: 'row2' }, $('button', { class: 'primary trybtn', text: feature === 'bookmarks' ? 'Try it: add a bookmark' : 'Try it on this file', onclick: () => post({ type: 'proTry', feature }) }), $('span', { class: 'meta', text: `${left} of 3 free tries left on this computer` })));
     card.append($('div', { class: 'row2' },
-      $('button', { class: 'primary', text: 'Get Pro', onclick: () => post({ type: 'proGet' }) }),
+      $('button', { class: left > 0 ? '' : 'primary', text: 'Get Pro', onclick: () => post({ type: 'proGet' }) }),
       $('button', { text: 'Enter key', onclick: () => post({ type: 'proKey' }) }),
       $('button', { class: 'link', text: 'More about this', onclick: () => post({ type: 'proExplain', feature }) })));
     return card;
@@ -56,7 +58,7 @@ export function createProUI(api) {
   function drawStruct() {
     const box = u.struct;
     box.textContent = '';
-    if (!P.licensed) {
+    if (!P.licensed && !P.structTrial) {
       const t = P.info && P.info.best ? `This file matches the ${P.info.best.name} template.` : P.info ? 'No built-in template matches this file; you can pick one or add your own.' : '';
       box.append(lockedCard('templates', 'Structure view', [t, 'See the fields of the file as a tree: names, offsets, values and enums. Click a field to select its bytes. 20 templates ship (PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and more), and you can write your own. Export a struct as JSON or C.']));
       return;
@@ -115,6 +117,7 @@ export function createProUI(api) {
     const box = u.bm;
     box.textContent = '';
     if (!P.licensed) {
+      if (P.bookmarks.length) box.append(bookmarkList());
       box.append(lockedCard('bookmarks', 'Bookmarks and notes', ['Mark byte ranges with a name, a color and a note, saved per file on this computer. F2 and Shift+F2 jump between them; Ctrl+F2 (Cmd+F2) adds one at the selection. Export the list as Markdown.']));
       return;
     }
@@ -123,6 +126,9 @@ export function createProUI(api) {
       $('span', { class: 'grow' }),
       $('button', { title: 'Open the list as Markdown', text: 'Export', disabled: !P.bookmarks.length, onclick: () => post({ type: 'bmExport' }) })));
     if (!P.bookmarks.length) { box.append($('p', { class: 'hintp', text: 'No bookmarks in this file yet. Select some bytes and press Ctrl+F2 (Cmd+F2), or click Add bookmark.' })); return; }
+    box.append(bookmarkList());
+  }
+  function bookmarkList() {
     const list = $('div', { class: 'bmlist', role: 'list' });
     for (const b of P.bookmarks) {
       const item = $('div', { class: 'bmi', role: 'listitem', tabindex: '0', title: b.note || b.label },
@@ -133,15 +139,14 @@ export function createProUI(api) {
       item.addEventListener('keydown', e => { if (e.key === 'Enter') selectRange(b.start, b.end); if (e.key === 'Delete') post({ type: 'bmRemove', id: b.id }); });
       list.append(item);
     }
-    box.append(list);
+    return list;
   }
   function addAtSelection() {
     const s0 = Math.min(S.anchor, S.cursor), s1 = Math.max(S.anchor, S.cursor) + 1;
-    if (!P.licensed) { post({ type: 'proExplain', feature: 'bookmarks' }); return; }
+    if (!P.licensed && !(P.trials && P.trials.bookmarks > 0)) { post({ type: 'proExplain', feature: 'bookmarks' }); return; }
     post({ type: 'bmAdd', start: s0, end: Math.min(Math.max(s1, s0 + 1), Math.max(1, S.size)) });
   }
   function jump(backward) {
-    if (!P.licensed) { post({ type: 'proExplain', feature: 'bookmarks' }); return; }
     const l = P.bookmarks;
     if (!l.length) { hint('No bookmarks in this file.'); return; }
     const at = S.cursor;
@@ -154,7 +159,7 @@ export function createProUI(api) {
   /** Extra classes for the cells of one row: bookmarks (colored underline) and the selected struct field. */
   function rowMarks(start, count) {
     const out = new Array(count).fill('');
-    if (P.licensed) {
+    {
       for (const b of P.bookmarks) {
         if (b.end <= start || b.start >= start + count) continue;
         for (let o = Math.max(b.start, start); o < Math.min(b.end, start + count); o++) out[o - start] = ' bk bk-' + b.color;
@@ -169,15 +174,17 @@ export function createProUI(api) {
   function onMessage(m) {
     switch (m.type) {
       case 'pro':
-        P.licensed = !!m.licensed; P.onSale = !!m.onSale;
+        P.licensed = !!m.licensed; P.onSale = !!m.onSale; if (m.trials) P.trials = m.trials;
         document.body.classList.toggle('licensed', P.licensed);
-        if (P.panel === 'struct') { if (P.licensed && !P.tree && !P.busy) parse(); drawStruct(); }
+        if (P.panel === 'struct') { if ((P.licensed || P.structTrial) && !P.tree && !P.busy) parse(); drawStruct(); }
         if (P.panel === 'bm') { post({ type: 'bmList' }); drawBookmarks(); }
         post({ type: 'bmList' });
         render();
         return true;
       case 'structInfo':
         P.info = m; if (m.licensed !== undefined) { P.licensed = m.licensed; document.body.classList.toggle('licensed', P.licensed); }
+        if (m.trials) P.trials = m.trials;
+        if (m.structTrial) P.structTrial = true;
         if (!P.treeName && m.best) P.treeName = m.best.name;
         u.tabs.querySelector('[data-panel="struct"]').title = m.best ? `Structure: ${m.best.name}` : 'Structure';
         drawStruct();
@@ -185,7 +192,7 @@ export function createProUI(api) {
       case 'structBusy': P.busy = true; P.treeName = m.name; drawStruct(); return true;
       case 'struct':
         P.busy = false;
-        if (m.locked) { P.licensed = false; drawStruct(); return true; }
+        if (m.locked) { P.licensed = false; P.structTrial = false; if (m.trial !== undefined) P.trials = { ...(P.trials || {}), templates: m.trial }; drawStruct(); return true; }
         P.none = !!m.none;
         if (m.none) { P.tree = null; P.treeName = ''; drawStruct(); return true; }
         if (P.treeId !== m.id) { P.selPath = null; P.open = new Set(['']); P.more = null; }
@@ -199,6 +206,7 @@ export function createProUI(api) {
       case 'bookmarks':
         P.bookmarks = m.list || [];
         if (m.licensed !== undefined) P.licensed = m.licensed;
+        if (m.trial !== undefined) P.trials = { ...(P.trials || {}), bookmarks: m.trial };
         if (P.panel === 'bm') drawBookmarks();
         render();
         return true;
@@ -219,7 +227,7 @@ export function createProUI(api) {
 
   /** After an edit or a change on disk: read the structure again (once the typing stops). */
   function afterChange() {
-    if (!P.licensed || !P.tree) return;
+    if ((!P.licensed && !P.structTrial) || !P.tree) return;
     clearTimeout(P.structTimer);
     P.structTimer = setTimeout(() => { if (P.panel === 'struct') parse(); else P.tree = null; }, 700);
   }
@@ -233,7 +241,7 @@ export function createProUI(api) {
   const probe = () => ({
     panel: P.panel, licensed: P.licensed, template: P.treeName, structError: P.treeError, busy: P.busy,
     treeTop: P.tree && P.tree.c ? P.tree.c.map(c => c.n) : null, selPath: P.selPath, bookmarks: P.bookmarks.map(b => [b.start, b.end, b.label]),
-    locked: !!document.querySelector('.pane:not([hidden]) .locked'), detected: P.info && P.info.best ? P.info.best.id : null,
+    locked: !!document.querySelector('.pane:not([hidden]) .locked'), detected: P.info && P.info.best ? P.info.best.id : null, trials: P.trials || null, structTrial: !!P.structTrial,
   });
 
   return { tabs: u.tabs, panes: [u.struct, u.bm], onMessage, onKey, rowMarks, afterChange, start, probe, show, state: P };

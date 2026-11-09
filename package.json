@@ -536,6 +536,14 @@
             "completionEvents": [
               "onCommand:workbench.action.openSettings"
             ]
+          },
+          {
+            "id": "zovo-related",
+            "title": "Files that often come with binary files",
+            "description": "If your project also has tensor files, archives or packet captures, these free Zovo extensions open them. A link opens the extension page, and you choose there whether to install it.\n[Tensor Viewer](command:extension.open?%5B%22zovo.tensor-viewer%22%5D)\n[ZIP Explorer](command:extension.open?%5B%22zovo.zip-archive-explorer%22%5D)\n[PCAP Viewer](command:extension.open?%5B%22zovo.zovo-pcap-viewer%22%5D)",
+            "media": {
+              "markdown": "walkthrough/related.md"
+            }
           }
         ]
       }
@@ -558,6 +566,6 @@
     "url": "https://github.com/theluckystrike/hex-viewer-vscode"
   },
   "sponsor": {
-    "url": "https://github.com/sponsors/theluckystrike"
+    "url": "https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878"
   }
 }

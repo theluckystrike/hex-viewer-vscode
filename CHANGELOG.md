@@ -7,7 +7,11 @@
 - ELF: symbol tables (.symtab, .dynsym) with names, and the dynamic table with needed libraries. PE: imported DLLs and functions, and the resource directory.
 - When no template fits, the Structure tab now offers 3 choices: request one (free), a template for your format in 2 working days for USD 49 with Zovo Pro included (GitHub Sponsors, or PayPal), or custom work for USD 299 once. It still shows at most once per session and never when a file opens.
 - The Pro window compares the price with 010 Editor.
-- Everything else in 0.3.3 is unchanged: the free viewer and editor, the other Pro tools with 3 free tries, the rating question and the support links.
+- "More free viewers" now starts with the Zovo extensions most related to this one. Picking one opens its Marketplace page, where you choose to install it.
+- The README has a "Support Zovo" section with GitHub Sponsors and the developer's GitHub profile, and "More tools by Zovo" lists related extensions.
+- The walkthrough ends with a step that links free Zovo extensions for the files that often come with this one. A link opens the extension page; nothing installs on its own.
+- The footer link "Zovo Pro, USD 19" and the Marketplace Sponsor button open the Zovo Pro tier (USD 19 once, for every Zovo extension) instead of the general GitHub Sponsors page.
+- Everything else in 0.3.3 is unchanged: the free viewer and editor, the other Pro tools with 3 free tries and the rating question.
 
 ## 0.3.3 (2026-11-10)
 

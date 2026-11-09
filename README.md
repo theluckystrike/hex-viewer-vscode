@@ -4,7 +4,7 @@
 ![Works offline](https://img.shields.io/badge/network-none-green)
 ![Any file size](https://img.shields.io/badge/files-4%20GB%2B-orange)
 
-Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, from a 0-byte file to a 4 GB disk image. Insert and delete bytes, compare two files byte by byte, go to an offset, search, read values in the data inspector and copy as hex, C array, Python bytes or base64.
+Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, from a 0-byte file to a 4 GB disk image. Insert and delete bytes, compare two files byte by byte, go to an offset, search, read values in the data inspector and copy as hex, C array, Python bytes or base64. An optional Pro add-on reads file formats with binary templates (see [Free and Pro](#free-and-pro)).
 
 ![A PNG file open in Hex Viewer inside VS Code. Bytes 0x10 to 0x13 of the IHDR chunk are selected, and the data inspector on the right reads them as big-endian uint32 1400, the image width. The toolbar has Go to offset, Find with Hex, Text and UTF-16 modes, bytes per row, the text encoding and Copy as. The status line shows the offset, the selection, PNG image, 134.5 KB and Overwrite.](https://github.com/theluckystrike/hex-viewer-vscode/raw/HEAD/images/hex-viewer-png.png)
 
@@ -14,6 +14,7 @@ Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, 
 - You can get anywhere. Go to an offset in hex or decimal, or jump by `+0x100` or `-16`. Find hex bytes with `??` wildcards, text, or UTF-16 text. The status bar shows the offset of the cursor.
 - Editing stays put. Type two hex digits to overwrite a byte, or press Insert to add bytes. Delete, cut and paste work on any selection. Every step can be undone.
 - Compare two files. Select two files in the Explorer and pick "Compare in Hex Viewer". F7 jumps to the next difference, also in two 4 GB files.
+- Pro, if you want it: a Structure view that reads PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and 13 more formats with binary templates, bookmarks with notes, checksums, a compare report and find in many files. Each Pro feature has 3 free tries.
 
 ## Quick start
 
@@ -80,6 +81,45 @@ Click "Little-endian" to switch to big-endian. In the release check, the values 
 - The toolbar counts every differing byte and area, and the scroll bar marks where they are. In the release check, two 4 GB files with one differing byte 64 bytes from the end were counted in 2.1 s (VS Code 1.90.2 on an Apple silicon Mac), with the extension host at 96 MB.
 - The compare reads the files as saved on disk, 1 MB at a time from each file.
 
+## Free and Pro
+
+Everything above is free and stays free, in this version and every later one: viewing files of any size, go to offset, find, copy as, the data inspector, editing with insert and delete, safe save, undo, and compare. Hex Viewer Pro adds tools for people who take file formats apart. Each Pro feature works 3 times on your computer without a key, so you can try it on your own files first.
+
+| | Free | Pro |
+|---|---|---|
+| View, find, go to offset, copy as, data inspector | yes | yes |
+| Edit, insert and delete bytes, safe save, undo | yes | yes |
+| Compare two files side by side, F7 to the next difference | yes | yes |
+| Structure view: binary templates for 20 formats, your own templates, export as JSON or C | 3 tries | yes |
+| Bookmarks with a name, a color and a note, saved per file, export as Markdown | 3 tries | yes |
+| Checksums of the selection or file: CRC-32, Adler-32, MD5, SHA-1, SHA-256, SHA-512 | 3 tries | yes |
+| Compare report: every differing range to a text, CSV or JSON file | 3 tries | yes |
+| Find bytes or text in many files | 3 tries | yes |
+
+### Structure view (binary templates)
+
+Open the Structure tab in the side panel. Hex Viewer picks the template that fits the file from its first bytes and shows the fields as a tree: name, value, enum name, offset and size. Click a field to select its bytes in the grid. The tree reads unsaved edits too, and reads the file again after you type.
+
+The 20 built-in templates: PNG, JPEG, GIF, BMP, ICO and CUR, TIFF (also DNG and many camera raw files), WebP, WAV, FLAC, MP4, MOV, M4A and HEIC boxes, ZIP (also JAR, APK, DOCX, XLSX, EPUB), GZIP, TAR, PDF (header, xref table and trailer), SQLite header, ELF, PE (EXE, DLL, SYS), Mach-O (also universal binaries), Java class and PCAP.
+
+- "Template..." reads the file with another template. The choice is kept for that file.
+- "JSON" and "C struct" open the selected struct (or the whole file) in a new editor: the values as JSON, or packed C structs with an initializer that holds the values.
+- Your own templates: JSON files in the `.vscode/hex-templates` folder of the workspace, or in folders from the setting `hexViewer.templateFolders`. A template is data, never code: it names fields, types (u8 to u64, i8 to i64, f32, f64, bytes, char, string, zstring, LEB128 and more), counts, conditions, switches, enums and flags, and offsets that can be expressions such as `header.offset + 16`. [TEMPLATES.md](https://github.com/theluckystrike/hex-viewer-vscode/blob/HEAD/TEMPLATES.md) explains the format; the built-in templates in the `templates` folder are examples.
+- Limits keep a broken file or template from hanging VS Code: 50,000 fields, 15 seconds, 100,000 items in one list. The tree says where it stopped and why.
+
+### Bookmarks, checksums, report, find in files
+
+- Bookmarks: select bytes and press Ctrl+F2 (Cmd+F2 on macOS), or use the Bookmarks tab. F2 and Shift+F2 jump to the next and previous bookmark. Bookmarks show as a colored line under their bytes and are saved per file on your computer. Bookmarks you have made stay yours: you can always view, edit and remove them.
+- Checksums: the "Checksums..." button under the data inspector, or "Hex Viewer Pro: Checksums of Selection or File". One pass over the bytes, so a 4 GB file works. Pick a value to copy it.
+- Compare report: "Export report" in the compare view writes every differing range with its offset, length and the first 16 bytes of both files, as text, CSV or JSON. The report is written as a stream, so two 4 GB files with many differences work.
+- Find in files: "Hex Viewer Pro: Find Bytes in Files..." or right-click a folder in the Explorer. Hex bytes with `??` wildcards, text, text ignoring case, or UTF-16 text. The list shows each match with its offset and the bytes around it; pick one to open the file there.
+
+### Getting Pro
+
+"Get Pro" (in a Pro tab, or the command "Hex Viewer: Get Hex Viewer Pro") opens the payment page in your browser. After paying you get a license key. Paste it with "Hex Viewer: Enter Pro License Key". The key is checked on your computer, with no network call, and kept in VS Code's secret storage. "Remove Pro License Key" removes it.
+
+Nothing about Pro shows up on its own: there is no popup when a file opens, no counter and no reminder. A Pro feature explains itself only when you click it after its free tries.
+
 ## Display
 
 ![The same PNG in the light theme at 16 bytes per row, with the cursor on offset 0x10.](https://github.com/theluckystrike/hex-viewer-vscode/raw/HEAD/images/light-theme.png)
@@ -106,16 +146,17 @@ Click "Little-endian" to switch to big-endian. In the release check, the values 
 | `hexViewer.maxRemoteMB` | 256 | Largest file from a remote or virtual file system |
 | `hexViewer.askForRating` | true | Ask one time for a Marketplace rating after a few days of use. Nothing is sent anywhere. |
 | `hexViewer.showSupportLinks` | true | Show the small Sponsor and More free viewers links in the status line |
+| `hexViewer.templateFolders` | [] | Folders with your own binary templates for the Structure view (Pro) |
 
 ## Privacy and safety
 
-The extension makes no network calls and has no telemetry. It writes to a file only when you save. The webview runs under a strict Content Security Policy (`default-src 'none'`, scripts by nonce, no remote sources) and gets bytes only from the extension host.
+The extension makes no network calls and has no telemetry. The one page it can open is the payment page, when you click "Get Pro"; the link carries a random install number and nothing else. A license key is checked on your computer. The extension writes to a file only when you save, or when you save a compare report. Templates are read as data and never run as code. The webview runs under a strict Content Security Policy (`default-src 'none'`, scripts by nonce, no remote sources) and gets bytes only from the extension host.
 
 ## Limits
 
-- Overwrite only. Insert and delete come in a later version.
-- No structure templates yet (PNG chunks, ZIP entries, ELF and PE headers).
 - Copy as... works up to 32 MB, and a paste up to 16 MB.
+- Bookmarks keep their offsets: an insert or delete before a bookmark does not move it.
+- Templates read up to 16 MB from the end of a file when they search for a marker (as the ZIP and PDF templates do). The PDF template reads classic xref tables; an xref stream (PDF 1.5 and later) is named but not unpacked.
 
 ## Support Zovo
 

@@ -253,7 +253,7 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   assert.match(state.modal[0].msg, /Bookmarks and notes is part of Zovo Pro/);
   assert.deepEqual(state.modal[0].items, ['Unlock with GitHub Sponsors', 'I have a license key', 'Get Zovo Pro']);
   assert.match(state.modal[0].detail, /used the 3 free tries/);
-  assert.match(state.modal[0].detail, /USD 15 once/);
+  assert.match(state.modal[0].detail, /USD 19 once/);
   assert.match(state.modal[0].detail, /stays free: viewing, find, go to offset/);
   // bookmarks made in the free tries stay usable: edit and remove need no key
   state.picks = [items => items.find(i => i.k === 'remove')];
@@ -265,12 +265,12 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   // Get Zovo Pro opens the GitHub Sponsors one-time page (the shared module's default) and nothing else
   state.modalAnswer = 'Get Zovo Pro';
   await v.send({ type: 'proExplain', feature: 'templates' }); await settle();
-  assert.deepEqual(state.external, ['https://github.com/sponsors/theluckystrike?frequency=one-time']);
+  assert.deepEqual(state.external, ['https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878']);
 });
 
 test('host: the Get Pro command opens the same page; no network on open or activation', async () => {
   await state.commands.get('hexViewer.getPro')();
-  assert.equal(state.external.at(-1), 'https://github.com/sponsors/theluckystrike?frequency=one-time');
+  assert.equal(state.external.at(-1), 'https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878');
   for (const f of ['src/pro/index.js', 'src/proHost.js', 'src/extension.js', 'src/license/index.js', 'src/license/license.js']) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /require\(['"](https?|net|tls)['"]\)|fetch\(/, f);
 });
 

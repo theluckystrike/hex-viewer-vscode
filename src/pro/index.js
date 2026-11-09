@@ -38,7 +38,7 @@ const FEATURES = {
   },
 };
 
-const PRICE_LINE = 'Zovo Pro is USD 15 once and unlocks the Pro features in every Zovo viewer. Already sponsored theluckystrike on GitHub with USD 10 or more? Choose Unlock with GitHub Sponsors: it asks GitHub one question and sends nothing else.';
+const PRICE_LINE = 'Zovo Pro is USD 19 once and unlocks the Pro features in every Zovo viewer. Already bought the "$19 one time" tier on GitHub Sponsors? Choose Unlock with GitHub Sponsors: it asks GitHub one question and sends nothing else.';
 
 function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex Viewer', keys = KEYS, license }) {
   const emitter = new vscode.EventEmitter();

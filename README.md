@@ -14,7 +14,7 @@ Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, 
 - You can get anywhere. Go to an offset in hex or decimal, or jump by `+0x100` or `-16`. Find hex bytes with `??` wildcards, text, or UTF-16 text. The status bar shows the offset of the cursor.
 - Editing stays put. Type two hex digits to overwrite a byte, or press Insert to add bytes. Delete, cut and paste work on any selection. Every step can be undone.
 - Compare two files. Select two files in the Explorer and pick "Compare in Hex Viewer". F7 jumps to the next difference, also in two 4 GB files.
-- Pro, if you want it: a Structure view that reads PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and 13 more formats with binary templates, bookmarks with notes, checksums, a compare report and find in many files. Each Pro feature has 3 free tries. Zovo Pro is USD 15 once for every Zovo viewer.
+- Pro, if you want it: a Structure view that reads PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and 13 more formats with binary templates, bookmarks with notes, checksums, a compare report and find in many files. Each Pro feature has 3 free tries. Zovo Pro is USD 19 once for every Zovo viewer.
 
 ## Quick start
 
@@ -116,10 +116,11 @@ The 20 built-in templates: PNG, JPEG, GIF, BMP, ICO and CUR, TIFF (also DNG and 
 
 ### Getting Pro
 
-The Pro features are part of Zovo Pro: USD 15 once on [GitHub Sponsors](https://github.com/sponsors/theluckystrike), and it unlocks the Pro features in every Zovo VS Code viewer.
+The Pro features are part of Zovo Pro: USD 19 once, on GitHub Sponsors (the ["$19 one time" tier](https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878)) or by PayPal, and it unlocks the Pro features in every Zovo VS Code viewer.
 
-- "Get Zovo Pro" (in a Pro tab, or the command "Hex Viewer: Get Zovo Pro") opens the GitHub Sponsors page in your browser.
-- Then run "Hex Viewer: Unlock Zovo Pro with GitHub Sponsors". VS Code asks you to sign in with GitHub, and Hex Viewer asks GitHub one question: has this account sponsored theluckystrike with USD 10 or more? If you have already sponsored that much, this is all you need.
+- "Get Zovo Pro" (in a Pro tab, or the command "Hex Viewer: Get Zovo Pro") opens the Zovo Pro tier on GitHub Sponsors in your browser.
+- Then run "Hex Viewer: Unlock Zovo Pro with GitHub Sponsors". VS Code asks you to sign in with GitHub, and Hex Viewer asks GitHub one question: has this account bought the Zovo Pro tier? If you bought it before, or you have a monthly sponsorship of USD 10 or more that is still running, this is all you need. The "$15 one time" and "$5 a month" tiers on the same page are for Obsidian plugins and do not include Zovo Pro.
+- No GitHub account? Send USD 19 to [paypal.com/paypalme/najzzz/19](https://www.paypal.com/paypalme/najzzz/19) with "Zovo Pro" in the note, and you get a license key by email within a day.
 - If you got a license key (it starts with ZOVO1.), paste it with "Hex Viewer: Enter Zovo Pro License Key". The key is checked on your computer and kept in VS Code's secret storage.
 - "Hex Viewer: Remove Zovo Pro from This Editor" removes it.
 

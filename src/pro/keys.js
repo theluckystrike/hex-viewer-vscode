@@ -7,7 +7,7 @@
 /* global __HEXV_TEST_PUBKEY__ */
 const TEST_PUBKEY = typeof __HEXV_TEST_PUBKEY__ !== 'undefined' ? __HEXV_TEST_PUBKEY__ : '';
 
-// "Get Pro" page. undefined: the shared module's default (the GitHub Sponsors one-time page, USD 15 for Zovo Pro).
+// "Get Pro" page. undefined: the shared module's default (the Zovo Pro tier on GitHub Sponsors, USD 19 once).
 // A Stripe Payment Link or https://license.zovo.one/buy/hex-pro goes here when that rail is live. '' = not on sale.
 const PAYMENT_URL = undefined;
 

@@ -2,7 +2,7 @@
 
 ## 0.3.0 (2026-11-09)
 
-Everything that was free stays free. New, with the optional Zovo Pro (USD 15 once for every Zovo viewer; each feature has 3 free tries):
+Everything that was free stays free. New, with the optional Zovo Pro (USD 19 once for every Zovo viewer; each feature has 3 free tries):
 
 - Structure view with binary templates: a tree of the fields of the file, with values, enum names, offsets and sizes; click a field to select its bytes. 20 built-in templates (PNG, JPEG, GIF, BMP, ICO, TIFF, WebP, WAV, FLAC, MP4, ZIP, GZIP, TAR, PDF, SQLite, ELF, PE, Mach-O, Java class, PCAP) and your own as JSON files. Export a struct as JSON or as C structs with its values.
 - Bookmarks with a name, a color and a note, saved per file. F2 and Shift+F2 jump, Ctrl+F2 (Cmd+F2) adds. Export as Markdown.

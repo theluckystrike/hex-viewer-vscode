@@ -42,8 +42,9 @@ export function createProUI(api) {
     const left = P.trials ? P.trials[feature] || 0 : 0;
     if (left > 0) card.append($('div', { class: 'row2' }, $('button', { class: 'primary trybtn', text: feature === 'bookmarks' ? 'Try it: add a bookmark' : 'Try it on this file', onclick: () => post({ type: 'proTry', feature }) }), $('span', { class: 'meta', text: `${left} of 3 free tries left on this computer` })));
     card.append($('div', { class: 'row2' },
-      $('button', { class: left > 0 ? '' : 'primary', text: 'Get Pro', onclick: () => post({ type: 'proGet' }) }),
-      $('button', { title: 'Unlock with GitHub Sponsors or a license key', text: 'Unlock', onclick: () => post({ type: 'proKey' }) }),
+      $('button', { class: left > 0 ? '' : 'primary', title: 'Opens the "$19 one time" Zovo Pro tier on GitHub Sponsors', text: 'Get Pro, USD 19', onclick: () => post({ type: 'proGet' }) }),
+      $('button', { title: 'USD 19, or USD 59 for a team of 5. The license key comes by email.', text: 'PayPal', onclick: () => post({ type: 'proPayPal' }) }),
+      $('button', { title: 'Already paid: unlock with GitHub Sponsors or a license key', text: 'Unlock', onclick: () => post({ type: 'proKey' }) }),
       $('button', { class: 'link', text: 'More about this', onclick: () => post({ type: 'proExplain', feature }) })));
     return card;
   }

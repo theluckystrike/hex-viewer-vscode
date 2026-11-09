@@ -199,7 +199,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
 
   // ---------- messages from the viewer ----------
 
-  const TYPES = new Set(['checksums', 'proState', 'proGet', 'proKey', 'proExplain', 'proTry', 'structDetect', 'structParse', 'structPick', 'structExport', 'bmList', 'bmAdd', 'bmEdit', 'bmRemove', 'bmExport']);
+  const TYPES = new Set(['checksums', 'proState', 'proGet', 'proPayPal', 'proKey', 'proExplain', 'proTry', 'structDetect', 'structParse', 'structPick', 'structExport', 'bmList', 'bmAdd', 'bmEdit', 'bmRemove', 'bmExport']);
   async function handle(me, msg, post) {
     switch (msg.type) {
       case 'proState': return post({ type: 'pro', licensed: pro.licensed, onSale: pro.onSale, trials: pro.trials() });
@@ -208,6 +208,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
         if (msg.feature === 'bookmarks') { const c = me.cursor || { selStart: 0, selEnd: 1 }; return addBookmark(me, c.selStart, Math.max(c.selEnd, c.selStart + 1)); }
         return;
       case 'proGet': return pro.getPro();
+      case 'proPayPal': return pro.payWithPayPal();
       case 'proKey': return pro.unlock();
       case 'proExplain': return pro.explain(msg.feature);
       case 'structDetect': return sendInfo(me, post);

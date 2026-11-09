@@ -38,11 +38,13 @@ const FEATURES = {
   },
 };
 
-const PRICE_LINE = 'Zovo Pro is USD 19 once and unlocks the Pro features in every Zovo viewer. Already bought the "$19 one time" tier on GitHub Sponsors? Choose Unlock with GitHub Sponsors: it asks GitHub one question and sends nothing else.';
+// The facade (src/license) adds the "How to buy" paragraph: the USD 19 tier on GitHub Sponsors, PayPal USD 19 or
+// USD 59 for a team of 5 (CONV2).
+const PRICE_LINE = 'Zovo Pro is USD 19 once, for life, and unlocks the Pro features in every Zovo viewer. Unlock with GitHub Sponsors asks GitHub one question and sends nothing else.';
 
 function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex Viewer', keys = KEYS, license }) {
   const emitter = new vscode.EventEmitter();
-  const opts = { vscode, context, sku: SKU, name: 'Zovo', commandPrefix: prefix };
+  const opts = { vscode, context, sku: SKU, name: 'Zovo', product: productName, commandPrefix: prefix };
   if (typeof keys.PAYMENT_URL === 'string') opts.paymentUrl = keys.PAYMENT_URL;
   if (keys.TEST_PUBKEY) { opts.publicKey = keys.TEST_PUBKEY; opts.allowTest = true; } // gate builds only
   const lic = license || createLicense(opts);
@@ -87,6 +89,7 @@ function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex V
     ready: lic.ready,
     gate, allowed, explain, trialLeft, trials, useTrial,
     getPro: () => lic.getPro(),
+    payWithPayPal: () => lic.payWithPayPal(),
     unlock: railId => lic.unlock(railId),
     enterKey: () => lic.unlock('license-key'),
     removeKey: () => lic.remove(),

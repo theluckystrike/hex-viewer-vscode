@@ -47,7 +47,7 @@ function validateWebviewMessage(m) {
     case 'error':
       return { ok: true, msg: { type: 'error', message: String(m.message || '').slice(0, 500) } };
     // Hex Viewer Pro
-    case 'proState': case 'proGet': case 'proKey': case 'structDetect': case 'structPick': case 'bmList': case 'bmExport': case 'checksums':
+    case 'proState': case 'proGet': case 'proPayPal': case 'proKey': case 'structDetect': case 'structPick': case 'bmList': case 'bmExport': case 'checksums':
       return { ok: true, msg: { type: m.type } };
     case 'proExplain': case 'proTry':
       if (!FEATURES.has(m.feature)) return { ok: false };

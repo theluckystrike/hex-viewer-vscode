@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 (2026-11-10)
+
+- Pay for Zovo Pro with PayPal from inside VS Code: a "Pay with PayPal" button in the Pro window and the Pro tabs, and the command "Pay for Zovo Pro with PayPal". It lists the 3 steps and opens PayPal with the amount filled in: USD 19 for one person, or USD 59 for a team of 5 with one shared key. The transaction ID goes to a short form on GitHub and the license key comes by email.
+- The Pro window now says how to buy: "Get Zovo Pro" opens the "$19 one time" tier on GitHub Sponsors, then you come back and choose "Unlock with GitHub Sponsors". The buy buttons come first, the buttons for people who already paid come after them.
+- Back from the browser: after "Get Zovo Pro" or a PayPal button, one message asks whether you paid and offers the next step (unlock with GitHub, or send the PayPal transaction ID). It shows once, within 2 hours, and never when Pro is already on.
+- When the GitHub check says this account has not bought Zovo Pro, or VS Code has no GitHub sign-in, the message now also offers PayPal and the license key.
+- The Get Pro button in the Pro tabs shows the price: "Get Pro, USD 19".
+- Everything in 0.3.1 is unchanged, the rating question included.
+
 ## 0.3.1 (2026-11-09)
 
 - The rating question comes after 2 files that opened without an error in 2 sessions at least 4 hours apart (was 3 files on 2 calendar days). It still never shows after an error, at most twice in all, and the setting turns it off.

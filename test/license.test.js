@@ -102,6 +102,8 @@ function fakeVscode(answers = {}) {
       showErrorMessage: async (msg) => { log.warn.push(msg); },
       showInputBox: async (o) => { log.input.push(o); return typeof answers.input === 'function' ? answers.input(o) : answers.input; },
       showQuickPick: async (items, o) => { log.picks.push(items.map((i) => i.label)); return answers.pick ? items.find((i) => i.label === answers.pick) : undefined; },
+      state: { focused: true },
+      onDidChangeWindowState: (fn) => { log.win = fn; return { dispose() { log.win = null; } }; },
     },
     commands: { registerCommand: (id, fn) => { log.commands[id] = fn; return { dispose() {} }; } },
   };
@@ -173,7 +175,7 @@ test('facade: Pro when ANY rail says so; commands registered; change events', as
   const pro = mk(f, { rails: [sp, keyOnly], commandPrefix: 'hexViewer' });
   await pro.ready;
   assert.equal(pro.isPro(), false);
-  assert.deepEqual(Object.keys(f.log.commands).sort(), ['hexViewer.enterLicenseKey', 'hexViewer.getPro', 'hexViewer.removeLicense', 'hexViewer.unlockWithSponsors']);
+  assert.deepEqual(Object.keys(f.log.commands).sort(), ['hexViewer.enterLicenseKey', 'hexViewer.getPro', 'hexViewer.payWithPayPal', 'hexViewer.removeLicense', 'hexViewer.unlockWithSponsors']);
   const seen = []; pro.onDidChange((p) => seen.push(p));
   await f.log.commands['hexViewer.unlockWithSponsors']();
   assert.equal(pro.isPro('hex-pro'), true);
@@ -200,7 +202,7 @@ test('facade unlock() with no rail id: quick pick of rails plus Get Pro', async 
   const pro = mk(g);
   await pro.ready;
   const r = await pro.unlock();
-  assert.deepEqual(g.log.picks[0], ['Unlock with GitHub Sponsors', 'I have a license key', 'Get Hex Viewer Pro']);
+  assert.deepEqual(g.log.picks[0], ['Unlock with GitHub Sponsors', 'I have a license key', 'Pay with PayPal', 'Get Hex Viewer Pro']);
   assert.equal(r.pro, true);
   assert.equal(pro.isPro(), true);
 });
@@ -229,7 +231,7 @@ test('requirePro: true when unlocked (and triggers rail refresh); explains with 
   await pro.ready;
   assert.equal(await pro.requirePro('Binary templates'), false);
   assert.match(f.log.info[0], /Binary templates is part of Hex Viewer Pro/);
-  assert.deepEqual(buttons, ['Unlock with GitHub Sponsors', 'Get Hex Viewer Pro']);
+  assert.deepEqual(buttons, ['Get Hex Viewer Pro', 'Pay with PayPal', 'Unlock with GitHub Sponsors']);
   await pro.unlock('github-sponsors');
   assert.equal(await pro.requirePro('Binary templates'), true);
   assert.equal(sp.refreshed, 1);
@@ -304,4 +306,143 @@ test('team licence: zovo-pro-team and zovo-pro + q=5 keys unlock every product a
     assert.equal(lic.renewUrl(lic.verifyKey(k, opts).license), null); // manual sale: no Stripe renew page
   }
   assert.equal(lic.checkKey(sign({ ...base, sku: 'zovo-pro-teams' }), 'hex-pro', opts).reason, 'sku'); // exact match only
+});
+
+
+// --- CONV2: the buy path (PayPal steps, back-from-browser message, failed GitHub unlock) ---
+const tick = () => new Promise((r) => setImmediate(r));
+
+test('CONV2 requirePro: detail says how to buy (USD 19 tier, come back, PayPal USD 19 / team USD 59)', async () => {
+  let detail;
+  const f = fakeVscode({ info: (msg, rest) => { if (rest[0] && rest[0].modal) detail = rest[0].detail; return undefined; } });
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  await pro.requirePro('Checksums', 'Computes CRC-32.');
+  assert.match(detail, /^Computes CRC-32\.\n\nHow to buy: "Get Zovo Pro" opens the "\$19 one time" tier on GitHub Sponsors\. After you pay, come back and choose "Unlock with GitHub Sponsors"\. "Pay with PayPal": USD 19, or USD 59 for a team of 5; the license key comes by email\.$/);
+  const g = fakeVscode({ info: (msg, rest) => { if (rest[0] && rest[0].modal) detail = rest[0].detail; return undefined; } });
+  await createLicense({ ...g, sku: 'hex-pro', name: 'Zovo', howToBuy: false }).requirePro('Checksums', 'X.');
+  assert.equal(detail, 'X.');
+});
+
+test('CONV2 PayPal: steps modal, USD 19 and team USD 59 links with currency, transaction-id form prefilled', async () => {
+  let pick = 'Pay USD 19 on PayPal'; let modal;
+  const f = fakeVscode({ info: (msg, rest) => { if (rest[0] && rest[0].modal) { modal = { msg, detail: rest[0].detail, buttons: rest.slice(1) }; return pick; } return undefined; } });
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', product: 'Hex Viewer', publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  assert.equal(await pro.payWithPayPal(), false);
+  assert.equal(modal.msg, 'Pay for Zovo Pro with PayPal');
+  assert.deepEqual(modal.buttons, ['Pay USD 19 on PayPal', 'Team of 5: USD 59', 'Send the transaction ID', 'I have a license key']);
+  assert.match(modal.detail, /USD 19 for one person, or USD 59 for a team of 5/);
+  assert.match(modal.detail, /transaction ID from the PayPal receipt/);
+  assert.match(modal.detail, /never your name or email/);
+  assert.match(modal.detail, /email address of your PayPal account/);
+  pick = 'Team of 5: USD 59'; await pro.payWithPayPal();
+  pick = 'Send the transaction ID'; await pro.payWithPayPal();
+  assert.deepEqual(f.log.opened, [
+    'https://www.paypal.com/paypalme/najzzz/19USD',
+    'https://www.paypal.com/paypalme/najzzz/59USD',
+    'https://github.com/theluckystrike/zovo-plugin-factory/issues/new?template=zovo-pro-key.yml&title=Zovo%20Pro%20key%3A%20PayPal%20payment%20for%20Hex%20Viewer&product=Hex%20Viewer',
+  ]);
+  pick = 'I have a license key'; f.log.opened.length = 0;
+  const g = fakeVscode({ info: (msg, rest) => (rest[0] && rest[0].modal ? 'I have a license key' : undefined), input: sign(base) });
+  const p2 = createLicense({ ...g, sku: 'hex-pro', name: 'Zovo', publicKey: PUB, now: () => NOW });
+  await p2.ready;
+  assert.equal(await p2.payWithPayPal(), true);
+  assert.equal(p2.isPro(), true);
+  const off = createLicense({ ...fakeVscode(), sku: 'hex-pro', paypalUrl: '' });
+  assert.equal(typeof off.payWithPayPal, 'function');
+});
+
+test('CONV2 requirePro "Pay with PayPal" button runs the PayPal steps', async () => {
+  const f = fakeVscode({ info: (msg, rest) => (rest[0] && rest[0].modal ? (msg.startsWith('Pay for') ? 'Pay USD 19 on PayPal' : 'Pay with PayPal') : undefined) });
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  assert.equal(await pro.requirePro('Checksums'), false);
+  assert.deepEqual(f.log.opened, ['https://www.paypal.com/paypalme/najzzz/19USD']);
+});
+
+test('CONV2 back from GitHub Sponsors: one message after blur+focus, Unlock runs the Sponsors rail; never twice', async () => {
+  const sp = fakeSponsors({ pro: true, reason: 'ok', message: 'Zovo Pro is on. Thank you.' });
+  const f = fakeVscode({ info: (msg, rest) => (msg.startsWith('Back from GitHub') ? 'Unlock with GitHub Sponsors' : undefined) });
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', rails: [sp], publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  f.log.win && f.log.win({ focused: true });
+  assert.equal(f.log.info.length, 0); // nothing armed, nothing shown
+  await pro.getPro();
+  assert.deepEqual(f.log.opened, ['https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878']);
+  f.log.win({ focused: true }); await tick();
+  assert.equal(f.log.info.length, 0); // focus without leaving first: no message
+  f.log.win({ focused: false }); f.log.win({ focused: true }); await tick(); await tick();
+  assert.match(f.log.info[0], /^Back from GitHub Sponsors\? If you paid for the "\$19 one time" tier, turn Zovo Pro on now/);
+  assert.equal(pro.isPro(), true);
+  const n = f.log.info.length;
+  f.log.win({ focused: false }); f.log.win({ focused: true }); await tick();
+  assert.equal(f.log.info.length, n); // shown once
+});
+
+test('CONV2 back-from-browser: silent when Pro already, or after 2 h', async () => {
+  const sp = fakeSponsors({ pro: true, reason: 'ok', message: 'on' });
+  const f = fakeVscode();
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', rails: [sp], publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  await pro.getPro();
+  await pro.unlock('github-sponsors'); // paid and unlocked from the palette meanwhile
+  const n = f.log.info.length;
+  f.log.win({ focused: false }); f.log.win({ focused: true }); await tick();
+  assert.equal(f.log.info.length, n);
+  const sp2 = fakeSponsors({ pro: false, reason: 'not-sponsor', message: 'no' });
+  const g = fakeVscode();
+  const p2 = createLicense({ ...g, sku: 'hex-pro', name: 'Zovo', rails: [sp2], publicKey: PUB, now: () => NOW });
+  const realNow = Date.now;
+  try {
+    await p2.getPro();
+    Date.now = () => realNow() + 2 * 60 * 60 * 1000 + 1;
+    g.log.win({ focused: false }); g.log.win({ focused: true }); await tick();
+    assert.equal(g.log.info.length, 0);
+  } finally { Date.now = realNow; }
+});
+
+test('CONV2 back from PayPal: offers the transaction-id form', async () => {
+  const f = fakeVscode({ info: (msg, rest) => (rest[0] && rest[0].modal ? 'Pay USD 19 on PayPal' : msg.startsWith('Back from PayPal') ? 'Send the transaction ID' : undefined) });
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', product: 'DOCX Viewer', publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  await pro.payWithPayPal();
+  f.log.win({ focused: false }); f.log.win({ focused: true }); await tick(); await tick();
+  assert.equal(f.log.opened.length, 2);
+  assert.match(f.log.opened[1], /zovo-pro-key\.yml&title=.*&product=DOCX%20Viewer$/);
+});
+
+test('CONV2 not a buyer yet: warning offers the tier page (arms the return message) and PayPal', async () => {
+  const sp = fakeSponsors({ pro: false, reason: 'not-sponsor', message: 'This GitHub account has not bought Zovo Pro yet.' });
+  let buttons;
+  const f = fakeVscode({ warn: (msg, rest) => { buttons = rest; return 'Open GitHub Sponsors'; } });
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', rails: [sp], publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  await pro.unlock('github-sponsors');
+  assert.deepEqual(buttons, ['Open GitHub Sponsors', 'Pay with PayPal']);
+  assert.deepEqual(f.log.opened, ['https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878']);
+  f.log.win({ focused: false }); f.log.win({ focused: true }); await tick();
+  assert.match(f.log.info.at(-1), /^Back from GitHub Sponsors\?/);
+});
+
+test('CONV2 no GitHub sign-in in this editor: offers PayPal and the license key', async () => {
+  const sp = fakeSponsors({ pro: false, reason: 'no-session', message: 'No GitHub sign-in. Nothing changed.' });
+  let buttons;
+  const f = fakeVscode({ warn: (msg, rest) => { buttons = rest; return 'I have a license key'; }, input: sign(base) });
+  const keyOnly = lic.createKeyRail({ ...f, sku: 'hex-pro', publicKey: PUB, now: () => NOW });
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', rails: [sp, keyOnly], publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  const r = await pro.unlock('github-sponsors');
+  assert.match(f.log.warn[0], /No GitHub sign-in\. Nothing changed\. You can also pay with PayPal/);
+  assert.deepEqual(buttons, ['Pay with PayPal', 'I have a license key']);
+  assert.equal(r.pro, true);
+  assert.equal(pro.isPro(), true);
+});
+
+test('CONV2 no network and no message on activation', async () => {
+  const f = fakeVscode();
+  const pro = createLicense({ ...f, sku: 'hex-pro', name: 'Zovo', commandPrefix: 'hexViewer', publicKey: PUB, now: () => NOW });
+  await pro.ready;
+  f.log.win && f.log.win({ focused: false }); f.log.win && f.log.win({ focused: true }); await tick();
+  assert.equal(f.log.info.length + f.log.warn.length + f.log.opened.length, 0);
 });

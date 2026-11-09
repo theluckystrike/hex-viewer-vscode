@@ -251,7 +251,9 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   await v.send({ type: 'bmAdd', start: 9, end: 10 }); await settle();
   assert.equal(state.modal.length, 1);
   assert.match(state.modal[0].msg, /Bookmarks and notes is part of Zovo Pro/);
-  assert.deepEqual(state.modal[0].items, ['Unlock with GitHub Sponsors', 'I have a license key', 'Get Zovo Pro']);
+  assert.deepEqual(state.modal[0].items, ['Get Zovo Pro', 'Pay with PayPal', 'Unlock with GitHub Sponsors', 'I have a license key']);
+  assert.match(state.modal[0].detail, /How to buy: "Get Zovo Pro" opens the "\$19 one time" tier on GitHub Sponsors\. After you pay, come back and choose "Unlock with GitHub Sponsors"\./);
+  assert.match(state.modal[0].detail, /USD 59 for a team of 5/);
   assert.match(state.modal[0].detail, /used the 3 free tries/);
   assert.match(state.modal[0].detail, /USD 19 once/);
   assert.match(state.modal[0].detail, /stays free: viewing, find, go to offset/);
@@ -286,6 +288,29 @@ test('host: a bad key is refused, a good key unlocks Pro and is kept in SecretSt
   assert.equal((await state.commands.get('hexViewer.enterLicenseKey')()).pro, true);
   assert.equal(state.secrets.get('zovo.license.key'), key);
   assert.match(state.infos.at(-1), /Zovo Pro is on/);
+});
+
+test('host (CONV2): the Pro tab buttons Get Pro, USD 19 and PayPal open the right pages; the command is registered', async () => {
+  const png = path.join(tmp, 'h-conv2.png');
+  fs.copyFileSync(path.join(__dirname, '..', 'images', 'hex-viewer-png.png'), png);
+  const v = await open(png);
+  state.external.length = 0; state.modal = [];
+  await v.send({ type: 'proGet' }); await settle();
+  assert.deepEqual(state.external, ['https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878']);
+  state.modalAnswer = 'Pay USD 19 on PayPal';
+  await v.send({ type: 'proPayPal' }); await settle();
+  assert.equal(state.modal.at(-1).msg, 'Pay for Zovo Pro with PayPal');
+  assert.deepEqual(state.modal.at(-1).items, ['Pay USD 19 on PayPal', 'Team of 5: USD 59', 'Send the transaction ID', 'I have a license key']);
+  assert.equal(state.external.at(-1), 'https://www.paypal.com/paypalme/najzzz/19USD');
+  state.modalAnswer = 'Send the transaction ID';
+  await state.commands.get('hexViewer.payWithPayPal')(); await settle();
+  assert.equal(state.external.at(-1), 'https://github.com/theluckystrike/zovo-plugin-factory/issues/new?template=zovo-pro-key.yml&title=Zovo%20Pro%20key%3A%20PayPal%20payment%20for%20Hex%20Viewer&product=Hex%20Viewer');
+  state.modalAnswer = undefined;
+  const pj = require('../package.json');
+  assert.ok(pj.contributes.commands.find(c => c.command === 'hexViewer.payWithPayPal'));
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'pro.js'), 'utf8');
+  assert.match(html, /text: 'Get Pro, USD 19'/);
+  assert.match(html, /type: 'proPayPal'/);
 });
 
 test('host (licensed): Structure view, template choice, JSON and C export', async () => {

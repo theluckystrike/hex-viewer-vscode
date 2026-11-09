@@ -19,11 +19,16 @@
 //   <prefix>.unlockWithSponsors "Zovo: Unlock Pro with GitHub Sponsors"   (only when the Sponsors rail is present)
 //   <prefix>.removeLicense     "Zovo: Remove license from this editor"
 //   <prefix>.payWithPayPal     "Zovo: Pay for Pro with PayPal"   (CONV2; only when a PayPal link is set)
+//   Order of the ways to pay (EXEC7): GitHub Sponsors first, PayPal second, then the license key.
 //
 // CONV2 (9 Nov): the buy path. Get Pro and Pay with PayPal open the browser and arm ONE "back from the browser"
 // message the next time the editor window gets focus again (within 2 h, only when still not Pro): it offers the
 // GitHub unlock or the PayPal transaction-id form. PayPal: USD 19 (one person) or USD 59 (team of 5), the
 // transaction id goes to the zovo-pro-key issue form, the key comes by email.
+//
+// EXEC7 (9 Nov, owner decision 22:16: GitHub Sponsors is the main checkout, PayPal second). One order everywhere,
+// in the unlock quick pick and in the requirePro modal: Get <Name> Pro (GitHub Sponsors) / Unlock with GitHub
+// Sponsors / Pay with PayPal / I have a license key / other rails. MODULE_VERSION names this change.
 
 const crypto = require('crypto');
 const { createKeyRail, INSTALL_ID_KEY } = require('./license');
@@ -37,6 +42,7 @@ const PRICE = { one: 19, team: 59, seats: 5 };
 // The public issue form where a PayPal buyer sends the transaction id (owner watches it; the key goes by email).
 const KEY_REQUEST_URL = 'https://github.com/theluckystrike/zovo-plugin-factory/issues/new?template=zovo-pro-key.yml';
 const RETURN_MS = 2 * 60 * 60 * 1000;
+const MODULE_VERSION = '2026-11-09.exec7';
 const PAYPAL_LABEL = 'Pay with PayPal';
 const LABELS = {
   'github-sponsors': 'Unlock with GitHub Sponsors',
@@ -81,6 +87,21 @@ function createLicense(o) {
   const onSponsors = () => paymentUrl === SPONSORS_ONE_TIME || /^https:\/\/github\.com\/sponsors\//.test(paymentUrl);
   const listeners = new Set();
   let last = null;
+
+  // EXEC7: the rails in checkout order, GitHub Sponsors first, the license key after PayPal, other rails last.
+  const RAIL_ORDER = ['github-sponsors', 'license-key'];
+  const railRank = (r) => { const i = RAIL_ORDER.indexOf(r.id); return i < 0 ? RAIL_ORDER.length : i; };
+  const railLabel = (r) => r.label || LABELS[r.id] || r.id;
+  // [{ id, label }] in the one Zovo order:
+  // Get Pro (GitHub Sponsors), Unlock with GitHub Sponsors, Pay with PayPal, I have a license key, other rails.
+  function choices() {
+    const sorted = rails.map((r, i) => ({ r, i })).sort((a, b) => railRank(a.r) - railRank(b.r) || a.i - b.i).map((x) => x.r);
+    const out = [{ id: 'buy', label: `Get ${label}` }];
+    for (const r of sorted.filter((x) => x.id === 'github-sponsors')) out.push({ id: r.id, label: railLabel(r) });
+    if (paypalUrl) out.push({ id: 'paypal', label: PAYPAL_LABEL });
+    for (const r of sorted.filter((x) => x.id !== 'github-sponsors')) out.push({ id: r.id, label: railLabel(r) });
+    return out;
+  }
 
   const isPro = (s) => rails.some((r) => { try { return r.isPro(s || sku); } catch (e) { return false; } });
   function changed() {
@@ -212,10 +233,13 @@ function createLicense(o) {
     let rail = railId ? byId(railId) : null;
     if (!rail && rails.length === 1) rail = rails[0];
     if (!rail) {
-      const DESC = { 'github-sponsors': `you paid on GitHub Sponsors`, 'license-key': 'a key that starts with ZOVO1.' };
-      const items = rails.map((r) => ({ label: r.label || LABELS[r.id] || r.id, description: DESC[r.id] || '', id: r.id }));
-      if (paypalUrl) items.push({ label: PAYPAL_LABEL, description: `USD ${PRICE.one}, team of ${PRICE.seats} USD ${PRICE.team}, key by email`, id: 'paypal' });
-      items.push({ label: `Get ${label}`, description: onSponsors() ? `USD ${PRICE.one} once on GitHub Sponsors` : '', id: 'buy' });
+      const DESC = {
+        buy: onSponsors() ? `GitHub Sponsors, USD ${PRICE.one} once` : '',
+        'github-sponsors': 'you paid on GitHub Sponsors',
+        paypal: `USD ${PRICE.one}, team of ${PRICE.seats} USD ${PRICE.team}, key by email`,
+        'license-key': 'a key that starts with ZOVO1.',
+      };
+      const items = choices().map((c) => ({ label: c.label, description: DESC[c.id] || '', id: c.id }));
       const pick = await vscode.window.showQuickPick(items, { title: `Unlock ${label}`, placeHolder: 'How did you get Zovo Pro? Or buy it here.' });
       const none = () => ({ rail: '', pro: isPro(), reason: 'cancelled', kind: 'none', login: '', message: '' });
       if (!pick) return none();
@@ -255,10 +279,8 @@ function createLicense(o) {
       for (const r of rails) if (typeof r.refresh === 'function') r.refresh().catch(() => {}); // due monthly recheck only
       return true;
     }
-    // Buy first (Get Pro, PayPal), then "I already paid" (the rails), then Renew.
-    const buttons = [`Get ${label}`];
-    if (paypalUrl) buttons.push(PAYPAL_LABEL);
-    buttons.push(...rails.map((r) => r.label || LABELS[r.id] || r.id));
+    // EXEC7 order: Get Pro (GitHub Sponsors), Unlock with GitHub Sponsors, Pay with PayPal, I have a license key, Renew.
+    const buttons = choices().map((c) => c.label);
     const renew = keyRail.renewUrl();
     if (renew) buttons.push('Renew page');
     const how = o.howToBuy === false ? '' : howToBuy();
@@ -271,7 +293,7 @@ function createLicense(o) {
     if (pick === `Get ${label}`) { await getPro(); return false; }
     if (pick === PAYPAL_LABEL) return payWithPayPal();
     if (pick === 'Renew page') { await open(renew); return false; }
-    const rail = rails.find((r) => (r.label || LABELS[r.id] || r.id) === pick);
+    const rail = rails.find((r) => railLabel(r) === pick);
     if (!rail) return false;
     return !!(await unlock(rail.id)).pro && isPro();
   }
@@ -329,4 +351,4 @@ function createLicense(o) {
   return api;
 }
 
-module.exports = { createLicense, SPONSORS_ONE_TIME, PAYPAL_ME, PRICE, KEY_REQUEST_URL };
+module.exports = { createLicense, SPONSORS_ONE_TIME, PAYPAL_ME, PRICE, KEY_REQUEST_URL, MODULE_VERSION };

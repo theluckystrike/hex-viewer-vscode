@@ -197,14 +197,42 @@ test('facade default rails: Sponsors rail from sponsors.js + key rail; Enter key
   assert.match(f.log.info[0], /Hex Viewer Pro is on/);
 });
 
-test('facade unlock() with no rail id: quick pick of rails plus Get Pro', async () => {
+test('facade unlock() with no rail id: quick pick, GitHub Sponsors first (EXEC7 order)', async () => {
   const g = fakeVscode({ pick: 'I have a license key', input: sign(base) });
   const pro = mk(g);
   await pro.ready;
   const r = await pro.unlock();
-  assert.deepEqual(g.log.picks[0], ['Unlock with GitHub Sponsors', 'I have a license key', 'Pay with PayPal', 'Get Hex Viewer Pro']);
+  assert.deepEqual(g.log.picks[0], ['Get Hex Viewer Pro', 'Unlock with GitHub Sponsors', 'Pay with PayPal', 'I have a license key']);
   assert.equal(r.pro, true);
   assert.equal(pro.isPro(), true);
+});
+
+test('EXEC7 order: Sponsors first, PayPal second, key third, other rails last, in the quick pick and the modal', async () => {
+  assert.equal(require(fs.existsSync(path.join(__dirname, '..', 'index.js')) ? '../index.js' : '../src/license/index.js').MODULE_VERSION, '2026-11-09.exec7');
+  const order = ['Get Hex Viewer Pro', 'Unlock with GitHub Sponsors', 'Pay with PayPal', 'I have a license key', 'Polar'];
+  const polar = { id: 'polar', label: 'Polar', ready: Promise.resolve(), isPro: () => false, unlock: async () => ({ pro: false, reason: 'cancelled' }) };
+  let buttons;
+  const f = fakeVscode({ info: (msg, rest) => { if (rest[0] && rest[0].modal) buttons = rest.slice(1); return undefined; } });
+  const sp = fakeSponsors({ pro: false, reason: 'cancelled', message: '' });
+  const key = lic.createKeyRail({ vscode: f.vscode, context: f.context, sku: 'hex-pro', name: 'Hex Viewer', publicKey: PUB });
+  const pro = mk(f, { rails: [polar, key, sp] }); // given in the wrong order on purpose
+  await pro.ready;
+  await pro.unlock();
+  assert.deepEqual(f.log.picks[0], order);
+  await pro.requirePro('Checksums');
+  assert.deepEqual(buttons, order);
+  const g = fakeVscode({ info: (msg, rest) => { if (rest[0] && rest[0].modal) buttons = rest.slice(1); return undefined; } });
+  const np = mk(g, { paypalUrl: '' });
+  await np.ready;
+  await np.unlock();
+  assert.deepEqual(g.log.picks[0], ['Get Hex Viewer Pro', 'Unlock with GitHub Sponsors', 'I have a license key'], 'no PayPal link: the key follows Sponsors');
+  await np.requirePro('Checksums');
+  assert.deepEqual(buttons, ['Get Hex Viewer Pro', 'Unlock with GitHub Sponsors', 'I have a license key']);
+  const h = fakeVscode({ pick: 'Get Hex Viewer Pro' });
+  const hp = mk(h);
+  await hp.ready;
+  await hp.unlock();
+  assert.deepEqual(h.log.opened, ['https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878'], 'the first pick opens the Zovo Pro tier');
 });
 
 test('Get Pro: Sponsors page by default; Stripe link gets a stable random install id; "" = not on sale', async () => {
@@ -231,7 +259,7 @@ test('requirePro: true when unlocked (and triggers rail refresh); explains with 
   await pro.ready;
   assert.equal(await pro.requirePro('Binary templates'), false);
   assert.match(f.log.info[0], /Binary templates is part of Hex Viewer Pro/);
-  assert.deepEqual(buttons, ['Get Hex Viewer Pro', 'Pay with PayPal', 'Unlock with GitHub Sponsors']);
+  assert.deepEqual(buttons, ['Get Hex Viewer Pro', 'Unlock with GitHub Sponsors', 'Pay with PayPal']);
   await pro.unlock('github-sponsors');
   assert.equal(await pro.requirePro('Binary templates'), true);
   assert.equal(sp.refreshed, 1);

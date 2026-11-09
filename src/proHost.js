@@ -10,6 +10,7 @@ const { writeReport } = require('./core/report');
 const { searchFiles } = require('./core/multisearch');
 const { checksums } = require('./core/checksum');
 const { parsePattern, hexOffset, fmtInt, fmtSize, hex2 } = require('./core/bytes');
+const { createCustomOffer, extensionOf } = require('./custom-offer');
 
 const MAX_TEMPLATE_FILES = 200;
 const MAX_TEMPLATE_BYTES = 1 << 20;
@@ -21,6 +22,9 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   const bookmarks = new BookmarkStore(context.globalState.get(BM_KEY));
   const saveBookmarks = () => context.globalState.update(BM_KEY, bookmarks.toJSON());
   let userTemplates = { list: [], problems: [], at: 0 };
+  // EXEC9: the USD 299 custom format line, at most once per session, only where no template applies to the file.
+  const custom = createCustomOffer({ vscode, product: 'Hex Viewer', version: context.extension && context.extension.packageJSON ? context.extension.packageJSON.version : '' });
+  const formatOf = me => extensionOf(me.doc.uri.path) || 'files without a known extension';
 
   // ---------- templates ----------
 
@@ -112,11 +116,29 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     const items = allTemplates().map(t => ({ label: t.name, description: (matches.has(t.id) ? 'matches this file' : '') + (t.source ? (matches.has(t.id) ? ', ' : '') + 'your template' : ''), detail: t.source || (t.extensions || []).map(e => '.' + e).join(' '), id: t.id }))
       .sort((a, b) => (matches.has(b.id) - matches.has(a.id)));
     items.push({ label: '$(folder-opened) Add your own templates...', description: 'setting hexViewer.templateFolders', id: '__folders' });
+    // EXEC9: no template matches this file: the custom format line, once per session. Some match: "None of these matches".
+    const sep = vscode.QuickPickItemKind && vscode.QuickPickItemKind.Separator;
+    const grant = !matches.size && !choiceFor(me.doc.uri) ? custom.claim() : null;
+    if (grant) {
+      if (sep) items.push({ kind: sep, label: 'No template for this format' });
+      items.push({ label: (sep ? '' : 'No template for this format. ') + '$(comment-discussion) Request one (free)', description: 'format request form on GitHub', id: '__customRequest' },
+        { label: `$(heart) Or we build it for USD ${grant.usd} once`, description: 'GitHub Sponsors', id: '__customTier' });
+    } else if (custom.available()) items.push({ label: '$(question) None of these matches this file', id: '__none' });
     const p = await vscode.window.showQuickPick(items, { title: 'Hex Viewer Pro: read this file with a template', matchOnDescription: true, matchOnDetail: true });
     if (!p) return;
     if (p.id === '__folders') { vscode.commands.executeCommand('workbench.action.openSettings', 'hexViewer.templateFolders'); return; }
+    if (p.id === '__customRequest' || p.id === '__customTier') { await custom.open(p.id === '__customTier' ? 'tier' : 'request', formatOf(me)); return; }
+    if (p.id === '__none') { me.noneMatches = true; return claimCustom(me, post); }
     setChoice(me.doc.uri, p.id);
     await parseFor(me, post, p.id);
+  }
+
+  /** EXEC9: the webview asks for the line after a user action. It shows only when no template applies to this file. */
+  async function claimCustom(me, post) {
+    if (!custom.available()) return;
+    if (!me.noneMatches && (await detectFor(me)).pick) return;
+    const g = custom.claim();
+    if (g) await post({ type: 'customGrant', usd: g.usd });
   }
 
   function nodeAt(root, idx) {
@@ -199,7 +221,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
 
   // ---------- messages from the viewer ----------
 
-  const TYPES = new Set(['checksums', 'proState', 'proGet', 'proPayPal', 'proKey', 'proExplain', 'proTry', 'structDetect', 'structParse', 'structPick', 'structExport', 'bmList', 'bmAdd', 'bmEdit', 'bmRemove', 'bmExport']);
+  const TYPES = new Set(['checksums', 'proState', 'proGet', 'proPayPal', 'proKey', 'proExplain', 'proTry', 'structDetect', 'structParse', 'structPick', 'structExport', 'bmList', 'bmAdd', 'bmEdit', 'bmRemove', 'bmExport', 'customClaim', 'customOpen']);
   async function handle(me, msg, post) {
     switch (msg.type) {
       case 'proState': return post({ type: 'pro', licensed: pro.licensed, onSale: pro.onSale, trials: pro.trials() });
@@ -221,6 +243,8 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
       case 'bmRemove': bookmarks.remove(bmKey(me.doc), msg.id); await saveBookmarks(); broadcastBookmarks(me.doc); return;
       case 'bmExport': return exportBookmarks(me);
       case 'checksums': return runChecksums(me);
+      case 'customClaim': return claimCustom(me, post);
+      case 'customOpen': return custom.open(msg.which, formatOf(me));
     }
   }
 
@@ -391,7 +415,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('hexViewer.templateFolders')) loadUserTemplates(true); }),
   );
 
-  return { handle, TYPES, findInFiles, exportReport, runChecksums, openAt, bookmarks, allTemplates, loadUserTemplates, parseFor, addBookmark };
+  return { handle, TYPES, custom, findInFiles, exportReport, runChecksums, openAt, bookmarks, allTemplates, loadUserTemplates, parseFor, addBookmark };
 }
 
 module.exports = { createProHost };

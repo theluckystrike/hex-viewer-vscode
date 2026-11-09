@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 (2026-11-10)
+
+- When no structure template fits the open file, the Structure tab (or the template picker) shows one line: "No template for this format. Request one (free), or we build it for USD 299 once." The first link opens the format request form on GitHub with the file extension filled in (never the file name). The second opens the GitHub Sponsors tier for custom format support. The template picker also gets "None of these matches this file" when the matching templates are wrong.
+- The line shows at most once per VS Code session, only after you open the Structure tab or press a button there, never when a file opens. No popup, no notification, and nothing is sent until you click a link.
+- The Pro window lists the ways to pay in one order: Get Zovo Pro (GitHub Sponsors), Unlock with GitHub Sponsors, Pay with PayPal, I have a license key (shared license module synced).
+- Everything else in 0.3.2 is unchanged: the free viewer and editor, the Pro tools with 3 free tries, the rating question and the support links.
+
 ## 0.3.2 (2026-11-10)
 
 - Pay for Zovo Pro with PayPal from inside VS Code: a "Pay with PayPal" button in the Pro window and the Pro tabs, and the command "Pay for Zovo Pro with PayPal". It lists the 3 steps and opens PayPal with the amount filled in: USD 19 for one person, or USD 59 for a team of 5 with one shared key. The transaction ID goes to a short form on GitHub and the license key comes by email.

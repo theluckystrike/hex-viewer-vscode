@@ -28,6 +28,7 @@ export function createProUI(api) {
     el.insPane.hidden = id !== 'inspector';
     u.struct.hidden = id !== 'struct';
     u.bm.hidden = id !== 'bm';
+    if (byUser && id === 'struct') P.userAct = true;
     if (byUser && el.side.hidden) { S.inspector = true; el.side.hidden = false; el.insBtn.setAttribute('aria-pressed', 'true'); persist(); api.layout(); }
     if (id === 'struct') { if (!P.info) post({ type: 'structDetect' }); if ((P.licensed || P.structTrial) && !P.tree && !P.busy) parse(); drawStruct(); }
     if (id === 'bm') { post({ type: 'bmList' }); drawBookmarks(); }
@@ -40,13 +41,26 @@ export function createProUI(api) {
     for (const l of lines) if (l) card.append($('p', { text: l }));
     card.append($('p', { class: 'free', text: 'Everything you use today stays free: viewing, find, go to offset, the data inspector, editing and compare.' }));
     const left = P.trials ? P.trials[feature] || 0 : 0;
-    if (left > 0) card.append($('div', { class: 'row2' }, $('button', { class: 'primary trybtn', text: feature === 'bookmarks' ? 'Try it: add a bookmark' : 'Try it on this file', onclick: () => post({ type: 'proTry', feature }) }), $('span', { class: 'meta', text: `${left} of 3 free tries left on this computer` })));
+    if (left > 0) card.append($('div', { class: 'row2' }, $('button', { class: 'primary trybtn', text: feature === 'bookmarks' ? 'Try it: add a bookmark' : 'Try it on this file', onclick: () => { if (feature === 'templates') P.userAct = true; post({ type: 'proTry', feature }); } }), $('span', { class: 'meta', text: `${left} of 3 free tries left on this computer` })));
     card.append($('div', { class: 'row2' },
       $('button', { class: left > 0 ? '' : 'primary', title: 'Opens the "$19 one time" Zovo Pro tier on GitHub Sponsors', text: 'Get Pro, USD 19', onclick: () => post({ type: 'proGet' }) }),
       $('button', { title: 'USD 19, or USD 59 for a team of 5. The license key comes by email.', text: 'PayPal', onclick: () => post({ type: 'proPayPal' }) }),
       $('button', { title: 'Already paid: unlock with GitHub Sponsors or a license key', text: 'Unlock', onclick: () => post({ type: 'proKey' }) }),
       $('button', { class: 'link', text: 'More about this', onclick: () => post({ type: 'proExplain', feature }) })));
     return card;
+  }
+
+  // ---------- custom format line (EXEC9) ----------
+  // Asked for only after the user opened the Structure tab or pressed a button there, and only while no template
+  // applies. The host checks that again and hands it out once per session. Never drawn on open, no popup.
+  function customLine() {
+    const p = $('p', { class: 'hintp customfmt' });
+    const parts = [{ text: 'No template for this format. ' }, { link: 'request', text: 'Request one (free)' }, { text: ', or ' }, { link: 'tier', text: `we build it for USD ${P.custom.usd} once` }, { text: '.' }];
+    for (const x of parts) p.append(x.link ? $('button', { class: 'link', title: x.link === 'tier' ? 'Opens the GitHub Sponsors tier in the browser' : 'Opens the format request form on GitHub in the browser', text: x.text, onclick: () => post({ type: 'customOpen', which: x.link }) }) : document.createTextNode(x.text));
+    return p;
+  }
+  function askCustom(noMatch) {
+    if (noMatch && P.userAct && !P.customAsked && !P.custom) { P.customAsked = true; post({ type: 'customClaim' }); }
   }
 
   // ---------- structure ----------
@@ -62,13 +76,15 @@ export function createProUI(api) {
     if (!P.licensed && !P.structTrial) {
       const t = P.info && P.info.best ? `This file matches the ${P.info.best.name} template.` : P.info ? 'No built-in template matches this file; you can pick one or add your own.' : '';
       box.append(lockedCard('templates', 'Structure view', [t, 'See the fields of the file as a tree: names, offsets, values and enums. Click a field to select its bytes. 20 templates ship (PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and more), and you can write your own. Export a struct as JSON or C.']));
+      if (P.custom) box.append(customLine());
+      askCustom(!!(P.info && !P.info.best));
       return;
     }
     const head = $('div', { class: 'phead' },
       $('span', { class: 'tname', text: P.busy ? `Reading with ${P.treeName || 'a template'}...` : (P.treeName || 'No template') }),
       $('span', { class: 'grow' }),
       $('button', { title: 'Read the file with another template', text: 'Template...', onclick: () => post({ type: 'structPick' }) }),
-      $('button', { title: 'Read the file again', 'aria-label': 'Refresh', text: '⟳', onclick: () => parse() }));
+      $('button', { title: 'Read the file again', 'aria-label': 'Refresh', text: '⟳', onclick: () => { P.userAct = true; parse(); } }));
     const exp = $('div', { class: 'phead' },
       $('span', { class: 'meta', text: P.treeMeta }), $('span', { class: 'grow' }),
       $('button', { title: 'Open the selected struct (or the whole file) as JSON', text: 'JSON', disabled: !P.tree, onclick: () => post({ type: 'structExport', format: 'json', path: P.selPath || [] }) }),
@@ -76,6 +92,8 @@ export function createProUI(api) {
     box.append(head, exp);
     if (P.treeError) box.append($('div', { class: 'perr', role: 'status', text: P.treeError }));
     if (P.none) box.append($('p', { class: 'hintp', text: 'No template matches this file. Pick one with Template..., or add your own JSON templates (setting hexViewer.templateFolders or the .vscode/hex-templates folder).' }));
+    if (P.custom) box.append(customLine());
+    askCustom(!!P.none);
     if (!P.tree) return;
     const list = $('div', { class: 'tree', role: 'tree', 'aria-label': 'File structure' });
     const LIMIT = 500;
@@ -192,6 +210,7 @@ export function createProUI(api) {
         u.tabs.querySelector('[data-panel="struct"]').title = m.best ? `Structure: ${m.best.name}` : 'Structure';
         drawStruct();
         return true;
+      case 'customGrant': P.custom = { usd: m.usd }; drawStruct(); return true;
       case 'structBusy': P.busy = true; P.treeName = m.name; drawStruct(); return true;
       case 'struct':
         P.busy = false;
@@ -244,7 +263,7 @@ export function createProUI(api) {
   const probe = () => ({
     panel: P.panel, licensed: P.licensed, template: P.treeName, structError: P.treeError, busy: P.busy,
     treeTop: P.tree && P.tree.c ? P.tree.c.map(c => c.n) : null, selPath: P.selPath, bookmarks: P.bookmarks.map(b => [b.start, b.end, b.label]),
-    locked: !!document.querySelector('.pane:not([hidden]) .locked'), detected: P.info && P.info.best ? P.info.best.id : null, trials: P.trials || null, structTrial: !!P.structTrial,
+    locked: !!document.querySelector('.pane:not([hidden]) .locked'), custom: (document.querySelector('.customfmt') || {}).textContent || null, detected: P.info && P.info.best ? P.info.best.id : null, trials: P.trials || null, structTrial: !!P.structTrial,
   });
 
   return { tabs: u.tabs, panes: [u.struct, u.bm], onMessage, onKey, rowMarks, afterChange, start, probe, show, state: P };

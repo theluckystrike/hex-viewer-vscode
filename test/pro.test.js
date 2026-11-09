@@ -251,7 +251,7 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   await v.send({ type: 'bmAdd', start: 9, end: 10 }); await settle();
   assert.equal(state.modal.length, 1);
   assert.match(state.modal[0].msg, /Bookmarks and notes is part of Zovo Pro/);
-  assert.deepEqual(state.modal[0].items, ['Get Zovo Pro', 'Pay with PayPal', 'Unlock with GitHub Sponsors', 'I have a license key']);
+  assert.deepEqual(state.modal[0].items, ['Get Zovo Pro', 'Unlock with GitHub Sponsors', 'Pay with PayPal', 'I have a license key']);
   assert.match(state.modal[0].detail, /How to buy: "Get Zovo Pro" opens the "\$19 one time" tier on GitHub Sponsors\. After you pay, come back and choose "Unlock with GitHub Sponsors"\./);
   assert.match(state.modal[0].detail, /USD 59 for a team of 5/);
   assert.match(state.modal[0].detail, /used the 3 free tries/);

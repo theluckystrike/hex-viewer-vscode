@@ -49,6 +49,11 @@ function validateWebviewMessage(m) {
     // Hex Viewer Pro
     case 'proState': case 'proGet': case 'proPayPal': case 'proKey': case 'structDetect': case 'structPick': case 'bmList': case 'bmExport': case 'checksums':
       return { ok: true, msg: { type: m.type } };
+    case 'customClaim':
+      return { ok: true, msg: { type: 'customClaim' } };
+    case 'customOpen':
+      if (m.which !== 'request' && m.which !== 'tier') return { ok: false };
+      return { ok: true, msg: { type: 'customOpen', which: m.which } };
     case 'proExplain': case 'proTry':
       if (!FEATURES.has(m.feature)) return { ok: false };
       return { ok: true, msg: { type: m.type, feature: m.feature } };

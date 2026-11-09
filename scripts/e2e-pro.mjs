@@ -57,7 +57,7 @@ const openHex = async file => {
 const quickTitle = () => vs.wbEval(`(() => { const w = document.querySelector('.quick-input-widget'); return w && w.style.display !== 'none' ? ((w.querySelector('.quick-input-title') || {}).textContent || '') : ''; })()`);
 const quickItems = () => vs.wbEval(`[...document.querySelectorAll('.quick-input-widget .monaco-list-row')].map(r => r.textContent.trim().slice(0, 200))`);
 const typeQuick = async text => {
-  const ib = await vs.waitFor(async () => JSON.parse(await vs.wbEval(`(() => { const i = [...document.querySelectorAll('.quick-input-widget input')].find(x => x.type !== 'checkbox' && x.getBoundingClientRect().width > 0); if (!i) return 'null'; return JSON.stringify(i.getBoundingClientRect()); })()`)), 6000);
+  const ib = await vs.waitFor(async () => JSON.parse(await vs.wbEval(`(() => { const i = [...document.querySelectorAll('.quick-input-widget input')].find(x => x.type !== 'checkbox' && x.getBoundingClientRect().width > 0); if (!i) return 'null'; return JSON.stringify(i.getBoundingClientRect()); })()`)), 15000);
   if (!ib) throw new Error('no input box');
   await vs.click(ib.x + ib.width / 2, ib.y + ib.height / 2); await vs.key('a', 'KeyA', 4, 65); await vs.type(text); await sleep(500);
 };
@@ -70,7 +70,15 @@ const clickDialog = async label => {
 };
 const notes = async () => (await vs.notifications()).join(' | ');
 const clearNotes = async () => { await cmd('Notifications: Clear All Notifications'); await sleep(300); };
-const tab = async id => { await vs.wvClick(wv, `document.querySelector('.tabs [data-panel="${id}"]')`); await sleep(500); };
+// A real click on a side panel tab. VS Code 1.90 (Electron 29) sometimes drops a scripted CDP click on a webview
+// that just opened; then click once more, then press the button from inside the page, and note it.
+R.notes = [];
+const tab = async id => {
+  const on = async () => (await pro()).panel === id;
+  for (let i = 0; i < 2; i++) { await vs.wvClick(wv, `document.querySelector('.tabs [data-panel="${id}"]')`); if (await vs.waitFor(on, 1500, 150)) return; }
+  R.notes.push(`tab ${id}: CDP click not delivered twice, used element.click()`);
+  await E(`document.querySelector('.tabs [data-panel="${id}"]').click(), 1`); await sleep(500);
+};
 const pro = async () => (await probe()).pro;
 const extHostMB = () => {
   const ud = path.join(work, 'ud');
@@ -143,6 +151,23 @@ try {
       const n = await notes();
       await clearNotes();
       return { prompt: d.text, buttons: d.buttons, after: n };
+    });
+    await step('free: setting hexViewer.showProFeatures false hides the Pro tabs, buttons and badges, and the Pro commands in the palette', async () => {
+      await closeAll();
+      const sf = path.join(work, 'ud', 'User', 'settings.json');
+      const cur = JSON.parse(fs.readFileSync(sf, 'utf8'));
+      fs.writeFileSync(sf, JSON.stringify({ ...cur, 'hexViewer.showProFeatures': false }, null, 1)); await sleep(2500);
+      await openHex('firmware.bin'); await sleep(800);
+      const vis = JSON.parse(await E(`JSON.stringify(['.tabs [data-panel="struct"]', '.tabs [data-panel="bm"]', '.sumrow', '.tabs [data-panel="inspector"]'].map(s => { const e = document.querySelector(s); return e ? getComputedStyle(e).display : 'missing'; }))`));
+      await cmd('>Hex Viewer Pro: Checksums'); await sleep(300);
+      // the palette was opened and Enter pressed by cmd(); with the command hidden nothing runs, so no quick pick of checksums opens
+      const ran = /^Checksums of/.test(await quickTitle());
+      await vs.key('Escape', 'Escape');
+      await shot('setting-off');
+      fs.writeFileSync(sf, JSON.stringify({ ...cur, 'hexViewer.showProFeatures': true }, null, 1)); await sleep(2500);
+      const back = await E(`getComputedStyle(document.querySelector('.tabs [data-panel="struct"]')).display`);
+      if (vis[0] !== 'none' || vis[1] !== 'none' || vis[2] !== 'none' || vis[3] === 'none' || ran || back === 'none') throw new Error(JSON.stringify({ vis, ran, back }));
+      return { hidden: vis, paletteRanChecksums: ran, afterOn: back };
     });
     await step('free: compare view has "Export report" with a PRO badge; free compare still counts differences', async () => {
       await closeAll();
@@ -322,5 +347,6 @@ try {
   if (clipBefore !== null) try { execSync('pbcopy', { input: clipBefore }); } catch {}
   R.shots = shots;
   fs.writeFileSync(outJson, JSON.stringify(R, null, 1));
+  if (R.notes.length) console.log('NOTES', JSON.stringify(R.notes));
   console.log(JSON.stringify({ phase, pass: R.steps.filter(s => s.ok).length, fail: R.steps.filter(s => s.ok === false).length, skip: R.steps.filter(s => s.ok === null).length, extErrors: R.extErrors.length, logErrors: R.logErrors, memory: R.memory, install: R.install.code }, null, 1));
 }

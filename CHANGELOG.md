@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (2026-11-09)
+
+- The rating question comes after 2 files that opened without an error in 2 sessions at least 4 hours apart (was 3 files on 2 calendar days). It still never shows after an error, at most twice in all, and the setting turns it off.
+- "Rate it" in the rating question and the Rate link in the viewer footer now open the review page of the store your editor installs from: the Visual Studio Marketplace in VS Code, Open VSX in Cursor, Windsurf, VSCodium and other editors that use Open VSX. Before, they always opened the Marketplace.
+- A window that stays open for days now counts a file opened 4 hours or more after its first one as a new session for the rating question.
+- Everything in 0.3.0 is unchanged.
+
 ## 0.3.0 (2026-11-09)
 
 Everything that was free stays free. New, with the optional Zovo Pro (USD 19 once for every Zovo viewer; each feature has 3 free tries):

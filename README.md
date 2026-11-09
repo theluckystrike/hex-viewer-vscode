@@ -150,7 +150,7 @@ Nothing about Pro shows up on its own: there is no popup when a file opens, no c
 | `hexViewer.showInspector` | true | Show the data inspector when a file opens |
 | `hexViewer.readOnly` | false | Turn off byte editing |
 | `hexViewer.maxRemoteMB` | 256 | Largest file from a remote or virtual file system |
-| `hexViewer.askForRating` | true | Ask one time for a Marketplace rating after a few days of use. Nothing is sent anywhere. |
+| `hexViewer.askForRating` | true | Ask for a rating after 2 files opened without an error in 2 sessions at least 4 hours apart. "Rate it" opens the Marketplace review page in VS Code and the Open VSX one in Cursor, Windsurf and VSCodium. "Later" asks one more time after 7 days, "No thanks" never again. It never asks after an error. Turn it off with `false`. |
 | `hexViewer.showSupportLinks` | true | Show the small Sponsor and More free viewers links in the status line |
 | `hexViewer.templateFolders` | [] | Folders with your own binary templates for the Structure view (Pro) |
 | `hexViewer.showProFeatures` | true | Off: hide the Pro badges, tabs, buttons and commands, so you see only the free viewer. With a Zovo Pro license they always show |

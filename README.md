@@ -14,7 +14,7 @@ Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, 
 - You can get anywhere. Go to an offset in hex or decimal, or jump by `+0x100` or `-16`. Find hex bytes with `??` wildcards, text, or UTF-16 text. The status bar shows the offset of the cursor.
 - Editing stays put. Type two hex digits to overwrite a byte, or press Insert to add bytes. Delete, cut and paste work on any selection. Every step can be undone.
 - Compare two files. Select two files in the Explorer and pick "Compare in Hex Viewer". F7 jumps to the next difference, also in two 4 GB files.
-- Pro, if you want it: a Structure view that reads PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and 13 more formats with binary templates, bookmarks with notes, checksums, a compare report and find in many files. Each Pro feature has 3 free tries.
+- Pro, if you want it: a Structure view that reads PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and 13 more formats with binary templates, bookmarks with notes, checksums, a compare report and find in many files. Each Pro feature has 3 free tries. Zovo Pro is USD 15 once for every Zovo viewer.
 
 ## Quick start
 
@@ -116,7 +116,12 @@ The 20 built-in templates: PNG, JPEG, GIF, BMP, ICO and CUR, TIFF (also DNG and 
 
 ### Getting Pro
 
-"Get Pro" (in a Pro tab, or the command "Hex Viewer: Get Hex Viewer Pro") opens the payment page in your browser. After paying you get a license key. Paste it with "Hex Viewer: Enter Pro License Key". The key is checked on your computer, with no network call, and kept in VS Code's secret storage. "Remove Pro License Key" removes it.
+The Pro features are part of Zovo Pro: USD 15 once on [GitHub Sponsors](https://github.com/sponsors/theluckystrike), and it unlocks the Pro features in every Zovo VS Code viewer.
+
+- "Get Zovo Pro" (in a Pro tab, or the command "Hex Viewer: Get Zovo Pro") opens the GitHub Sponsors page in your browser.
+- Then run "Hex Viewer: Unlock Zovo Pro with GitHub Sponsors". VS Code asks you to sign in with GitHub, and Hex Viewer asks GitHub one question: has this account sponsored theluckystrike with USD 10 or more? If you have already sponsored that much, this is all you need.
+- If you got a license key (it starts with ZOVO1.), paste it with "Hex Viewer: Enter Zovo Pro License Key". The key is checked on your computer and kept in VS Code's secret storage.
+- "Hex Viewer: Remove Zovo Pro from This Editor" removes it.
 
 Nothing about Pro shows up on its own: there is no popup when a file opens, no counter and no reminder. A Pro feature explains itself only when you click it after its free tries.
 
@@ -150,7 +155,7 @@ Nothing about Pro shows up on its own: there is no popup when a file opens, no c
 
 ## Privacy and safety
 
-The extension makes no network calls and has no telemetry. The one page it can open is the payment page, when you click "Get Pro"; the link carries a random install number and nothing else. A license key is checked on your computer. The extension writes to a file only when you save, or when you save a compare report. Templates are read as data and never run as code. The webview runs under a strict Content Security Policy (`default-src 'none'`, scripts by nonce, no remote sources) and gets bytes only from the extension host.
+The extension has no telemetry and makes no network calls, except one call to GitHub when you choose "Unlock Zovo Pro with GitHub Sponsors". A monthly sponsor gets one silent recheck every 30 days. A license key is checked on your computer. "Get Zovo Pro" opens a page in your browser. The extension writes to a file only when you save, or when you save a compare report. Templates are read as data and never run as code. The webview runs under a strict Content Security Policy (`default-src 'none'`, scripts by nonce, no remote sources) and gets bytes only from the extension host.
 
 ## Limits
 

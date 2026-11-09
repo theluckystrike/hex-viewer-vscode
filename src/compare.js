@@ -91,7 +91,7 @@ async function openCompare(context, uri, uris, activeUri) {
         return;
       }
       if (m.type === 'report') { if (hooks.report) await hooks.report(a, b, ua, ub); return; }
-      if (m.type === 'proGet' || m.type === 'proKey') { if (hooks.pro) await (m.type === 'proGet' ? hooks.pro.getPro() : hooks.pro.enterKey()); return;
+      if (m.type === 'proGet' || m.type === 'proKey') { if (hooks.pro) await (m.type === 'proGet' ? hooks.pro.getPro() : hooks.pro.unlock()); return;
       }
       if (m.type === 'read') {
         const [x, y] = await Promise.all([a.read(m.offset, m.length), b.read(m.offset, m.length)]);

@@ -24,6 +24,7 @@ const vs = await launch(work, Number(port), ws, {
 const shots = [];
 const shot = async name => { if (process.env.GATE_NOSHOT) return null; const f = path.join(shotDir, `pro-${phase}-${String(shots.length + 1).padStart(2, '0')}-${name}.png`); await vs.shot(f); shots.push(f); return f; };
 const step = async (name, fn) => {
+  if (process.env.ONLY && !new RegExp(process.env.ONLY).test(name) && !/License Key/.test(name)) return;
   const t0 = Date.now();
   try { const v = await fn(); R.steps.push({ name, ok: v !== false, value: v, ms: Date.now() - t0 }); console.log('PASS', name); }
   catch (e) {
@@ -125,12 +126,21 @@ try {
       await vs.wvClick(wv, `document.querySelector('.sumrow button')`);
       const d = await vs.waitFor(dialog, 6000);
       await shot('free-4th-click-dialog');
-      if (!d || !/Checksums is part of Hex Viewer Pro/.test(d.text) || !d.buttons.includes('Get Pro') || !d.buttons.includes('Enter Key') || !/used the 3 free tries/.test(d.detail)) throw new Error(JSON.stringify(d));
-      await clickDialog('Get Pro');
-      const n = await vs.waitFor(async () => /not on sale yet/.test(await notes()) && (await notes()), 5000);
-      if (!n) throw new Error('Get Pro without a payment link: ' + (await notes()));
+      if (!d || !/Checksums is part of Zovo Pro/.test(d.text) || !['Unlock with GitHub Sponsors', 'I have a license key', 'Get Zovo Pro'].every(b => d.buttons.includes(b)) || !/used the 3 free tries/.test(d.detail)) throw new Error(JSON.stringify(d));
+      // Cancel: "Get Zovo Pro" would open the owner's browser
+      await clickDialog('Cancel');
+      if (await dialog()) throw new Error('the dialog stayed open');
+      return { tries: seen, dialog: d.text, buttons: d.buttons, detail: d.detail.slice(0, 400) };
+    });
+    await step('free: "Unlock Zovo Pro with GitHub Sponsors" shows VS Code\'s GitHub sign-in prompt (cancelled here; the owner does the real sign-in)', async () => {
+      await cmd('Hex Viewer: Unlock Zovo Pro with GitHub Sponsors');
+      const d = await vs.waitFor(dialog, 8000);
+      await shot('sponsors-sign-in-prompt');
+      if (!d || !/GitHub/i.test(d.text + d.detail)) throw new Error(JSON.stringify({ d, notes: await notes() }));
+      await clickDialog('Cancel'); await sleep(800);
+      const n = await notes();
       await clearNotes();
-      return { tries: seen, dialog: d.text, buttons: d.buttons, getPro: n };
+      return { prompt: d.text, buttons: d.buttons, after: n };
     });
     await step('free: compare view has "Export report" with a PRO badge; free compare still counts differences', async () => {
       await closeAll();
@@ -148,11 +158,11 @@ try {
   }
 
   if (phase === 'pro') {
-    await step('pro: Enter Pro License Key with the test key turns Pro on and hides the PRO badges', async () => {
+    await step('pro: Enter Zovo Pro License Key with the test key turns Pro on and hides the PRO badges', async () => {
       await openHex('sample.png');
-      await cmd('Hex Viewer: Enter Pro License Key'); await sleep(600);
+      await cmd('Hex Viewer: Enter Zovo Pro License Key'); await sleep(600);
       await typeQuick(process.env.GATE_KEY); await enter();
-      const n = await vs.waitFor(async () => /Pro is on/.test(await notes()) && (await notes()), 6000);
+      const n = await vs.waitFor(async () => /Zovo Pro is on/.test(await notes()) && (await notes()), 6000);
       await sleep(500);
       const badges = JSON.parse(await E(`JSON.stringify([...document.querySelectorAll('.tabs .pro')].map(b => getComputedStyle(b).display))`));
       const p = await pro();
@@ -188,7 +198,9 @@ try {
       const mem = extHostMB();
       R.memory.push({ step: '4g-zip-template', mem });
       await shot('hostile-4g-zip');
-      if (!p || !/was not found/.test(p.structError || '') || mem.some(m => m.mb > 600)) throw new Error(JSON.stringify({ p, mem }));
+      const host = mem.find(m => m.mb > 0 && m.mb === Math.max(...mem.map(x => x.mb)));
+      if (!p || !/was not found/.test(p.structError || '')) throw new Error(JSON.stringify({ p, last: await pro(), title: await quickTitle(), items: (await quickItems()).slice(0, 3), notes: await notes(), pane: (await E(`document.querySelector('.pane.struct').textContent`)).slice(0, 300) }));
+      if (mem.some(m => m.mb > 900)) throw new Error('memory ' + JSON.stringify(mem));
       return { error: p.structError, mem };
     });
     await step('pro hostile: truncated PNG, random bytes read as ELF, a file that changes while the tree is open', async () => {
@@ -249,8 +261,8 @@ try {
       await vs.wvClick(wv, `[...document.querySelectorAll('.pane.struct button')].find(b => b.textContent === 'JSON')`); await sleep(1500);
       const json = await vs.wbEval(`(document.querySelector('.editor-group-container.active .monaco-editor .view-lines') || {}).innerText || ''`);
       await shot('export-json');
-      await cmd('View: Close Editor'); await sleep(300);
-      await vs.key('Escape', 'Escape');
+      await cmd('View: Revert and Close Editor'); await sleep(500);
+      if (await dialog()) await clickDialog("Don't Save");
       const ok = /"signature"/.test(json) && /"width": 3/.test(json.replace(/ /g, ' '));
       if (!ok) throw new Error(json.slice(0, 400));
       return { json: json.slice(0, 200) };

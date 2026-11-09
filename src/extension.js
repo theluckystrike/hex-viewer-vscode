@@ -433,6 +433,8 @@ function activate(context) {
   proHost = createProHost({ vscode, context, pro, shared, viewType: VIEW_ANY });
   compareHooks.report = (a, b, ua, ub) => proHost.exportReport(a, b, ua, ub);
   compareHooks.pro = pro;
+  // vscode://zovo.zovo-hex-viewer/license?key=ZOVO1... from the license page: asks before it stores the key
+  if (vscode.window.registerUriHandler) context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: uri => pro.handleUri(uri) }));
   for (const vt of VIEW_TYPES) {
     context.subscriptions.push(vscode.window.registerCustomEditorProvider(vt, new HexEditorProvider(context, shared), {
       supportsMultipleEditorsPerDocument: true,

@@ -1,107 +1,52 @@
 'use strict';
-// Hex Viewer Pro in the extension host: the license state, the "this is a Pro feature" explanation, and the
-// Get Pro / Enter key commands. Rules: everything that was free stays free; a Pro action without a license
-// explains itself once per click (no popup on open, no counter, no reminder); the only outbound action is the
-// payment page, opened by the user's click. The key is checked offline and kept in VS Code's SecretStorage.
-const crypto = require('crypto');
-const { verifyKey, cleanKey } = require('./license');
+// Hex Viewer's Pro layer on top of the shared Zovo license module (src/license, copied unchanged from
+// factory/sprint/license). The module answers isPro('hex-pro') from local caches (GitHub Sponsors unlock or an
+// offline ZOVO1 license key) and owns the unlock, Get Pro and remove commands. This file adds what is Hex-specific:
+// the feature texts and 3 free tries per feature.
+// Rules: everything that was free stays free; nothing about Pro shows on open; a Pro feature explains itself only
+// after the user clicks it with no free tries left; no network except what the user starts (the GitHub Sponsors
+// unlock, or a page opened in the browser).
+const { createLicense } = require('../license');
 const KEYS = require('./keys');
 
 const SKU = 'hex-pro';
-const SECRET = 'zovo.license.' + SKU;
-// Try before buying: each Pro feature works this many times on this computer without a key (a local counter,
-// no network, no timer). After that a click explains the feature and offers Get Pro and Enter key.
+// Try before buying: each Pro feature works this many times on this computer without unlocking (a local counter,
+// no network, no timer). After that a click explains the feature and offers the ways to unlock.
 const TRIAL_USES = 3;
 const TRIAL_KEY = 'hexViewer.proTrial';
 
 const FEATURES = {
   templates: {
     title: 'Binary templates and the Structure view',
-    detail: 'Hex Viewer Pro reads the file with a template and shows its fields as a tree: names, offsets, values and enums, with a click to select the bytes. 20 templates ship (PNG, JPEG, GIF, BMP, ICO, TIFF, WebP, WAV, FLAC, MP4, ZIP, GZIP, TAR, PDF, SQLite, ELF, PE, Mach-O, Java class, PCAP), and you can add your own as JSON files. Export any struct as JSON or as a C struct.',
+    detail: 'Reads the file with a template and shows its fields as a tree: names, offsets, values and enums, with a click to select the bytes. 20 templates ship (PNG, JPEG, GIF, BMP, ICO, TIFF, WebP, WAV, FLAC, MP4, ZIP, GZIP, TAR, PDF, SQLite, ELF, PE, Mach-O, Java class, PCAP), and you can add your own as JSON files. Export any struct as JSON or as a C struct.',
   },
   bookmarks: {
     title: 'Bookmarks and notes',
-    detail: 'Hex Viewer Pro marks byte ranges with a name, a color and a note, saved per file on this computer. F2 jumps to the next bookmark. Export the list as Markdown.',
-  },
-  report: {
-    title: 'Compare report export',
-    detail: 'Hex Viewer Pro writes every differing range of the two files to a text, CSV or JSON report, with offsets, lengths and the bytes on both sides. Works on 4 GB and larger files.',
+    detail: 'Marks byte ranges with a name, a color and a note, saved per file on this computer. F2 jumps to the next bookmark. Export the list as Markdown.',
   },
   checksums: {
     title: 'Checksums',
-    detail: 'Hex Viewer Pro computes CRC-32, Adler-32, MD5, SHA-1, SHA-256 and SHA-512 of the selection or the whole file in one pass, 4 GB files included. Click a value to copy it.',
+    detail: 'Computes CRC-32, Adler-32, MD5, SHA-1, SHA-256 and SHA-512 of the selection or the whole file in one pass, 4 GB files included. Click a value to copy it.',
+  },
+  report: {
+    title: 'Compare report export',
+    detail: 'Writes every differing range of the two files to a text, CSV or JSON report, with offsets, lengths and the bytes on both sides. Works on 4 GB and larger files.',
   },
   findInFiles: {
     title: 'Find bytes in many files',
-    detail: 'Hex Viewer Pro searches hex bytes (with ?? wildcards), text or UTF-16 text across the files of the workspace or a folder, and lists every match with its offset. A click opens the file at the match.',
+    detail: 'Searches hex bytes (with ?? wildcards), text or UTF-16 text across the files of the workspace or a folder, and lists every match with its offset. A click opens the file at the match.',
   },
 };
 
-function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex Viewer', keys = KEYS }) {
+const PRICE_LINE = 'Zovo Pro is USD 15 once and unlocks the Pro features in every Zovo viewer. Already sponsored theluckystrike on GitHub with USD 10 or more? Choose Unlock with GitHub Sponsors: it asks GitHub one question and sends nothing else.';
+
+function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex Viewer', keys = KEYS, license }) {
   const emitter = new vscode.EventEmitter();
-  const state = { licensed: false, payload: null, loaded: false };
-  const publicKeys = () => keys.PUBLIC_KEYS.filter(Boolean);
-
-  async function load() {
-    try {
-      const key = await context.secrets.get(SECRET);
-      const r = key ? verifyKey(key, SKU, publicKeys()) : { ok: false };
-      state.licensed = !!r.ok; state.payload = r.ok ? r.payload : null;
-    } catch { state.licensed = false; }
-    state.loaded = true;
-    emitter.fire(state.licensed);
-    return state.licensed;
-  }
-
-  function installId() {
-    let id = context.globalState.get('zovo.installId');
-    if (!id) { id = crypto.randomUUID(); context.globalState.update('zovo.installId', id); }
-    return id;
-  }
-
-  /** The payment page with a random install id (no name, no email, nothing about the machine). */
-  function paymentUrl() {
-    if (!keys.PAYMENT_URL) return '';
-    const u = new URL(keys.PAYMENT_URL);
-    u.searchParams.set('client_reference_id', installId());
-    return u.toString();
-  }
-
-  async function getPro() {
-    const url = paymentUrl();
-    if (!url) {
-      await vscode.window.showInformationMessage(`${productName} Pro is not on sale yet. Everything else in ${productName} stays free.`);
-      return false;
-    }
-    return vscode.env.openExternal(vscode.Uri.parse(url));
-  }
-
-  async function enterKey() {
-    const input = await vscode.window.showInputBox({
-      title: `${productName} Pro: enter your license key`,
-      prompt: 'Paste the key from the page you saw after paying. It is checked on this computer; nothing is sent.',
-      placeHolder: 'eyJza3UiOiJoZXgtcHJvIi...',
-      ignoreFocusOut: true,
-      validateInput: v => { if (!cleanKey(v)) return null; const r = verifyKey(v, SKU, publicKeys()); return r.ok ? null : r.reason; },
-    });
-    if (input === undefined || !cleanKey(input)) return false;
-    const r = verifyKey(input, SKU, publicKeys());
-    if (!r.ok) { vscode.window.showErrorMessage(r.reason); return false; }
-    await context.secrets.store(SECRET, cleanKey(input));
-    state.licensed = true; state.payload = r.payload;
-    emitter.fire(true);
-    vscode.window.showInformationMessage(`${productName} Pro is on. Thank you for supporting the project.`);
-    return true;
-  }
-
-  async function removeKey() {
-    const pick = await vscode.window.showWarningMessage(`Remove the ${productName} Pro key from this computer?`, { modal: true }, 'Remove');
-    if (pick !== 'Remove') return false;
-    await context.secrets.delete(SECRET);
-    state.licensed = false; state.payload = null;
-    emitter.fire(false);
-    return true;
-  }
+  const opts = { vscode, context, sku: SKU, name: 'Zovo', commandPrefix: prefix };
+  if (typeof keys.PAYMENT_URL === 'string') opts.paymentUrl = keys.PAYMENT_URL;
+  if (keys.TEST_PUBKEY) { opts.publicKey = keys.TEST_PUBKEY; opts.allowTest = true; } // gate builds only
+  const lic = license || createLicense(opts);
+  lic.onDidChange(() => emitter.fire(lic.isPro(SKU)));
 
   const trialUsed = feature => Number((context.globalState.get(TRIAL_KEY) || {})[feature]) || 0;
   const trialLeft = feature => (FEATURES[feature] ? Math.max(0, TRIAL_USES - trialUsed(feature)) : 0);
@@ -110,57 +55,47 @@ function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex V
     const m = { ...(context.globalState.get(TRIAL_KEY) || {}) };
     m[feature] = trialUsed(feature) + 1;
     await context.globalState.update(TRIAL_KEY, m);
-    emitter.fire(state.licensed);
+    const left = trialLeft(feature);
+    vscode.window.setStatusBarMessage(`${productName}: free try of ${(FEATURES[feature] || { title: 'this feature' }).title.toLowerCase()}, ${left} left on this computer.`, 6000);
+    emitter.fire(lic.isPro(SKU));
   }
 
-  /** Explain a Pro feature (modal, only after the user clicked it) and offer both ways in. */
+  /** Explain a Pro feature (one modal, only after the user clicked it) with the ways to unlock. True when unlocked. */
   async function explain(feature) {
     const f = FEATURES[feature] || { title: 'This feature', detail: '' };
     const tried = trialUsed(feature) >= TRIAL_USES ? `You have used the ${TRIAL_USES} free tries of this feature on this computer.\n\n` : '';
-    const pick = await vscode.window.showInformationMessage(`${f.title} is part of ${productName} Pro`, {
-      modal: true,
-      detail: `${tried}${f.detail}\n\nEverything else in ${productName} stays free: viewing, find, go to offset, the data inspector, editing, insert and delete, and compare. Your key is checked on this computer; nothing is sent.`,
-    }, 'Get Pro', 'Enter Key');
-    if (pick === 'Get Pro') { await getPro(); return false; }
-    if (pick === 'Enter Key') return enterKey();
-    return false;
+    return lic.requirePro(f.title, `${tried}${f.detail}\n\n${PRICE_LINE}\n\nEverything else in ${productName} stays free: viewing, find, go to offset, the data inspector, editing, insert and delete, and compare.`);
   }
 
-  /**
-   * True when the user may run the feature now: licensed, or a free try is left (it is used up here).
-   * Otherwise the explanation shows. trial: false to skip the free tries (for buttons that only explain).
-   */
-  async function gate(feature, opts = {}) {
-    if (state.licensed) return true;
-    if (opts.trial !== false && trialLeft(feature) > 0) {
-      await useTrial(feature);
-      const left = trialLeft(feature);
-      const f = FEATURES[feature];
-      vscode.window.setStatusBarMessage(`${productName} Pro: free try of ${f ? f.title.toLowerCase() : 'this feature'}, ${left} left on this computer.`, 6000);
-      return true;
-    }
+  /** Licensed, or a free try is left (used up here). Otherwise the explanation. */
+  async function gate(feature) {
+    if (lic.isPro(SKU)) { lic.refresh(); return true; }
+    if (trialLeft(feature) > 0) { await useTrial(feature); return true; }
     return explain(feature);
   }
 
-  context.subscriptions.push(
-    emitter,
-    vscode.commands.registerCommand(`${prefix}.getPro`, () => getPro()),
-    vscode.commands.registerCommand(`${prefix}.enterLicenseKey`, () => enterKey()),
-    vscode.commands.registerCommand(`${prefix}.removeLicenseKey`, () => removeKey()),
-  );
-  // A key entered in another window shows up here too.
-  if (context.secrets.onDidChange) context.subscriptions.push(context.secrets.onDidChange(e => { if (e.key === SECRET) load(); }));
-  const ready = load();
+  /** Licensed or a free try left: the caller asks its questions first and calls useTrial() when the action runs. */
+  async function allowed(feature) {
+    if (lic.isPro(SKU)) { lic.refresh(); return true; }
+    if (trialLeft(feature) > 0) return true;
+    return explain(feature);
+  }
 
+  context.subscriptions.push(emitter);
   return {
-    get licensed() { return state.licensed; },
-    ready, gate, explain, getPro, enterKey, removeKey, load, trialLeft, trials, useTrial,
-    /** Licensed or a free try left: the caller asks its questions first and calls useTrial() when the action runs. */
-    async allowed(feature) { if (state.licensed || trialLeft(feature) > 0) return true; await explain(feature); return false; },
+    get licensed() { return lic.isPro(SKU); },
+    ready: lic.ready,
+    gate, allowed, explain, trialLeft, trials, useTrial,
+    getPro: () => lic.getPro(),
+    unlock: railId => lic.unlock(railId),
+    enterKey: () => lic.unlock('license-key'),
+    removeKey: () => lic.remove(),
+    handleUri: uri => lic.handleUri(uri),
     onDidChange: emitter.event,
     features: FEATURES,
-    get onSale() { return !!keys.PAYMENT_URL; },
+    license: lic,
+    get onSale() { return keys.PAYMENT_URL !== ''; },
   };
 }
 
-module.exports = { createPro, FEATURES, SKU };
+module.exports = { createPro, FEATURES, SKU, TRIAL_USES };

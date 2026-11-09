@@ -208,7 +208,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
         if (msg.feature === 'bookmarks') { const c = me.cursor || { selStart: 0, selEnd: 1 }; return addBookmark(me, c.selStart, Math.max(c.selEnd, c.selStart + 1)); }
         return;
       case 'proGet': return pro.getPro();
-      case 'proKey': return pro.enterKey();
+      case 'proKey': return pro.unlock();
       case 'proExplain': return pro.explain(msg.feature);
       case 'structDetect': return sendInfo(me, post);
       case 'structParse': return parseFor(me, post, msg.id);

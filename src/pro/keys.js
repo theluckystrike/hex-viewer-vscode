@@ -1,17 +1,14 @@
 'use strict';
-// Public keys that sign Hex Viewer Pro licenses, and the payment page. Set by the release from the shared
-// license module (factory/sprint/license, lane PAY1). Only public keys belong here, never a private key.
-// __HEXV_TEST_PUBKEY__ is set only by a gate build (scripts/build.js with HEXV_TEST_PUBKEY) so the real
-// VS Code check can unlock Pro with a throwaway key; release builds leave it empty.
+// Build-time settings for Zovo Pro in Hex Viewer. The live public key is inside src/license/license.js (shared
+// module); nothing here may hold a private key.
+// TEST_PUBKEY is set only in a gate build (scripts/build.js with HEXV_TEST_PUBKEY, an SPKI base64 key): it replaces
+// the live key and allows test-mode keys, so the real VS Code check can unlock Pro with a throwaway key.
+// Release builds leave it empty.
 /* global __HEXV_TEST_PUBKEY__ */
-const TEST = typeof __HEXV_TEST_PUBKEY__ !== 'undefined' ? __HEXV_TEST_PUBKEY__ : '';
+const TEST_PUBKEY = typeof __HEXV_TEST_PUBKEY__ !== 'undefined' ? __HEXV_TEST_PUBKEY__ : '';
 
-const PUBLIC_KEYS = [
-  // production key from PAY1 goes here
-  TEST,
-];
+// "Get Pro" page. undefined: the shared module's default (the GitHub Sponsors one-time page, USD 15 for Zovo Pro).
+// A Stripe Payment Link or https://license.zovo.one/buy/hex-pro goes here when that rail is live. '' = not on sale.
+const PAYMENT_URL = undefined;
 
-// Stripe Payment Link for Hex Viewer Pro (from PAY1). Empty: "Get Pro" says Pro is not on sale yet.
-const PAYMENT_URL = '';
-
-module.exports = { PUBLIC_KEYS, PAYMENT_URL };
+module.exports = { TEST_PUBKEY, PAYMENT_URL };

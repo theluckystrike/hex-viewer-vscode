@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const Module = require('module');
-const { verifyKey, signKey, cleanKey } = require('../src/pro/license.js');
+const LIC = require('../src/license/license.js');
 const { BookmarkStore, normalize, MAX_PER_FILE } = require('../src/core/bookmarks.js');
 const { writeReport } = require('../src/core/report.js');
 const { diffRanges } = require('../src/core/compare.js');
@@ -20,55 +20,24 @@ const { validateWebviewMessage } = require('../src/core/protocol.js');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hexv-pro-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-const PUB = publicKey.export({ type: 'spki', format: 'pem' });
-const PRIV = privateKey.export({ type: 'pkcs8', format: 'pem' });
-const other = crypto.generateKeyPairSync('ed25519');
+const PUB = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// a ZOVO1 key as the license Worker makes it (test mode: lm false)
+const zkey = payload => { const p = b64u(JSON.stringify({ v: 1, iat: '2026-11-09', lm: false, ...payload })); return `${LIC.KEY_PREFIX}${p}.${b64u(crypto.sign(null, Buffer.from(LIC.SIG_CONTEXT + p), privateKey))}`; };
 const mem = b => HexDocument.fromBytes(Uint8Array.from(b), null);
 
 // ---------- license ----------
 
-test('license: a valid key, the bundle key, and pasted text around it', () => {
-  const k = signKey({ sku: 'hex-pro', iat: 1762650000 }, PRIV);
-  assert.equal(verifyKey(k, 'hex-pro', [PUB]).ok, true);
-  assert.equal(verifyKey(`  License key: ${k}\n`, 'hex-pro', [PUB]).ok, true);
-  assert.equal(verifyKey(`"${k.slice(0, 30)}\n${k.slice(30)}"`, 'hex-pro', [PUB]).ok, true);
-  assert.equal(verifyKey(signKey({ sku: 'zovo-pro', iat: 1 }, PRIV), 'hex-pro', [PUB]).ok, true);
-  // a DER base64 public key works too
-  const der = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
-  assert.equal(verifyKey(k, 'hex-pro', [der]).ok, true);
-});
-
-test('license: the PREFIX.payload.signature layout of the XLSX viewer keys', () => {
-  const k = signKey({ v: 1, product: 'zovo-pro', plan: 'lifetime', expires: null }, PRIV, 'ZPRO1');
-  assert.match(k, /^ZPRO1\./);
-  assert.equal(verifyKey(k, 'hex-pro', [PUB]).ok, true);
-  assert.match(verifyKey(signKey({ product: 'hex-pro', expires: '2020-01-01' }, PRIV, 'ZPRO1'), 'hex-pro', [PUB]).reason, /ended on 2020-01-01/);
-  assert.equal(verifyKey(signKey({ product: 'hex-pro', expires: '2999-01-01' }, PRIV, 'ZPRO1'), 'hex-pro', [PUB]).ok, true);
-  // the prefix is signed: moving the body to another prefix breaks it
-  assert.equal(verifyKey(k.replace(/^ZPRO1/, 'TVPRO1'), 'hex-pro', [PUB]).ok, false);
-});
-
-test('license: tampered, wrong key, wrong product, expired, garbage', () => {
-  const k = signKey({ sku: 'hex-pro', iat: 1 }, PRIV);
-  const [body, sig] = k.split('.');
-  const forged = Buffer.from(JSON.stringify({ sku: 'hex-pro', iat: 1, exp: 9e12 })).toString('base64url') + '.' + sig;
-  assert.match(verifyKey(forged, 'hex-pro', [PUB]).reason, /not valid/);
-  assert.match(verifyKey(body + '.' + sig.slice(0, -2) + (sig.endsWith('AA') ? 'BB' : 'AA'), 'hex-pro', [PUB]).reason, /not valid/);
-  assert.match(verifyKey(k, 'hex-pro', [other.publicKey.export({ type: 'spki', format: 'pem' })]).reason, /not valid/);
-  assert.match(verifyKey(signKey({ sku: 'docx-pro', iat: 1 }, PRIV), 'hex-pro', [PUB]).reason, /for docx-pro/);
-  const exp = verifyKey(signKey({ sku: 'hex-pro', iat: 1, exp: '2020-01-01' }, PRIV), 'hex-pro', [PUB]);
-  assert.equal(exp.ok, false); assert.equal(exp.expired, true); assert.match(exp.reason, /ended on 2020-01-01/);
-  assert.equal(verifyKey(signKey({ sku: 'hex-pro', exp: Date.now() / 1000 + 3600 }, PRIV), 'hex-pro', [PUB]).ok, true);
-  for (const g of ['', 'abc', 'x'.repeat(5000), 'a.b', '{"sku":"hex-pro"}', null, undefined]) assert.equal(verifyKey(g, 'hex-pro', [PUB]).ok, false);
-  assert.equal(verifyKey(k, 'hex-pro', []).ok, false);
-  assert.equal(verifyKey(k, 'hex-pro', ['not a key', '']).ok, false);
-  assert.equal(cleanKey(' key = abc.def '), 'abc.def');
-});
-
-test('license: the release build has no test key and no private key in the source', () => {
+test('license: the release build has no test key and only the shared module holds the live public key', () => {
   const keys = require('../src/pro/keys.js');
-  assert.deepEqual(keys.PUBLIC_KEYS.filter(Boolean), []);
-  for (const f of ['src/pro/keys.js', 'src/pro/index.js', 'src/pro/license.js']) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /PRIVATE KEY-----/);
+  assert.equal(keys.TEST_PUBKEY, '');
+  assert.equal(keys.PAYMENT_URL, undefined);
+  for (const f of ['src/pro/keys.js', 'src/pro/index.js', 'src/license/license.js', 'src/license/index.js', 'src/license/sponsors.js']) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /PRIVATE KEY-----/);
+  // the shared files are copied unchanged
+  for (const f of ['index.js', 'license.js', 'sponsors.js']) {
+    const shared = path.join(os.homedir(), 'plugin-market-intel-work', 'factory', 'sprint', 'license', f);
+    if (fs.existsSync(shared)) assert.equal(fs.readFileSync(path.join(__dirname, '..', 'src', 'license', f), 'utf8'), fs.readFileSync(shared, 'utf8'), f);
+  }
 });
 
 // ---------- bookmarks ----------
@@ -211,7 +180,7 @@ const vscodeMock = {
     registerCustomEditorProvider(id, p) { this.registered.push([id, p]); return { dispose() {} }; },
     createStatusBarItem() { return { text: '', show() {}, hide() {}, dispose() {} }; },
     showInformationMessage: async (msg, opts, ...items) => { if (opts && opts.modal) { state.modal.push({ msg, detail: opts.detail, items }); return state.modalAnswer; } state.infos.push(msg); return undefined; },
-    showWarningMessage: async (msg, opts, ...items) => (opts && opts.modal ? items[0] : undefined),
+    showWarningMessage: async (msg, opts, ...items) => { state.infos.push(String(msg)); return opts && opts.modal ? items[0] : undefined; },
     showErrorMessage: async m => { state.infos.push('ERR ' + m); },
     showInputBox: async o => { const v = state.inputs.shift(); if (o && o.validateInput && v) { const e = o.validateInput(v); if (e) { state.infos.push('INVALID ' + e); return undefined; } } return v; },
     showQuickPick: async (items) => { const want = state.picks.shift(); return typeof want === 'function' ? want(items) : items[want || 0]; },
@@ -228,6 +197,7 @@ const vscodeMock = {
 const origLoad = Module._load;
 Module._load = function (req, ...rest) { return req === 'vscode' ? vscodeMock : origLoad.call(this, req, ...rest); };
 const keys = require('../src/pro/keys.js');
+keys.TEST_PUBKEY = PUB; // as a gate build: trust the test key, allow test-mode keys
 const ext = require('../src/extension.js');
 const ctx = {
   subscriptions: [], extensionUri: uriOf('/ext'),
@@ -280,9 +250,10 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   assert.equal(state.modal.length, 0);
   await v.send({ type: 'bmAdd', start: 9, end: 10 }); await settle();
   assert.equal(state.modal.length, 1);
-  assert.match(state.modal[0].msg, /Bookmarks and notes is part of Hex Viewer Pro/);
-  assert.deepEqual(state.modal[0].items, ['Get Pro', 'Enter Key']);
+  assert.match(state.modal[0].msg, /Bookmarks and notes is part of Zovo Pro/);
+  assert.deepEqual(state.modal[0].items, ['Unlock with GitHub Sponsors', 'I have a license key', 'Get Zovo Pro']);
   assert.match(state.modal[0].detail, /used the 3 free tries/);
+  assert.match(state.modal[0].detail, /USD 15 once/);
   assert.match(state.modal[0].detail, /stays free: viewing, find, go to offset/);
   // bookmarks made in the free tries stay usable: edit and remove need no key
   state.picks = [items => items.find(i => i.k === 'remove')];
@@ -291,35 +262,30 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   // free features still answer
   await v.send({ type: 'search', query: '49 48 44 52', mode: 'hex', from: 0, id: 1 }); await settle(80);
   assert.equal(v.last('searchResult').offset, 12);
-  // Get Pro before the payment link exists: says so, opens nothing
-  state.modalAnswer = 'Get Pro';
+  // Get Zovo Pro opens the GitHub Sponsors one-time page (the shared module's default) and nothing else
+  state.modalAnswer = 'Get Zovo Pro';
   await v.send({ type: 'proExplain', feature: 'templates' }); await settle();
-  assert.equal(state.external.length, 0);
-  assert.match(state.infos.at(-1), /not on sale yet/);
+  assert.deepEqual(state.external, ['https://github.com/sponsors/theluckystrike?frequency=one-time']);
 });
 
-test('host: Get Pro opens only the payment page with a random install id', async () => {
-  keys.PAYMENT_URL = 'https://buy.stripe.com/test_abc';
+test('host: the Get Pro command opens the same page; no network on open or activation', async () => {
   await state.commands.get('hexViewer.getPro')();
-  const u = new URL(state.external.at(-1));
-  assert.equal(u.origin + u.pathname, 'https://buy.stripe.com/test_abc');
-  assert.match(u.searchParams.get('client_reference_id'), /^[0-9a-f-]{36}$/);
-  await state.commands.get('hexViewer.getPro')();
-  assert.equal(state.external.at(-1), state.external.at(-2), 'the install id stays the same');
-  keys.PAYMENT_URL = '';
+  assert.equal(state.external.at(-1), 'https://github.com/sponsors/theluckystrike?frequency=one-time');
+  for (const f of ['src/pro/index.js', 'src/proHost.js', 'src/extension.js', 'src/license/index.js', 'src/license/license.js']) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /require\(['"](https?|net|tls)['"]\)|fetch\(/, f);
 });
 
 test('host: a bad key is refused, a good key unlocks Pro and is kept in SecretStorage', async () => {
-  keys.PUBLIC_KEYS.push(PUB);
-  state.inputs = [signKey({ sku: 'docx-pro', iat: 1 }, PRIV)];
-  assert.equal(await state.commands.get('hexViewer.enterLicenseKey')(), false);
+  state.inputs = [zkey({ sku: 'docx-pro' })];
+  assert.equal((await state.commands.get('hexViewer.enterLicenseKey')()).pro, false);
   assert.match(state.infos.at(-1), /for docx-pro/);
-  assert.equal(state.secrets.size, 0);
-  const key = signKey({ sku: 'hex-pro', iat: 1 }, PRIV);
+  assert.equal(state.secrets.get('zovo.license.key'), undefined);
+  state.inputs = ['TVPRO1.abc.def'];
+  assert.equal((await state.commands.get('hexViewer.enterLicenseKey')()).pro, false);
+  const key = zkey({ sku: 'zovo-pro' });
   state.inputs = [key];
-  assert.equal(await state.commands.get('hexViewer.enterLicenseKey')(), true);
-  assert.equal(state.secrets.get('zovo.license.hex-pro'), key);
-  assert.match(state.infos.at(-1), /Pro is on/);
+  assert.equal((await state.commands.get('hexViewer.enterLicenseKey')()).pro, true);
+  assert.equal(state.secrets.get('zovo.license.key'), key);
+  assert.match(state.infos.at(-1), /Zovo Pro is on/);
 });
 
 test('host (licensed): Structure view, template choice, JSON and C export', async () => {
@@ -422,14 +388,14 @@ test('host (licensed): checksums of the selection and of the whole file', async 
 });
 
 test('host: removing the key locks Pro again', async () => {
-  await state.commands.get('hexViewer.removeLicenseKey')();
-  assert.equal(state.secrets.size, 0);
+  await state.commands.get('hexViewer.removeLicense')();
+  assert.equal(state.secrets.get('zovo.license.key'), undefined);
   state.modal = []; state.modalAnswer = undefined;
   state.global.set('hexViewer.proTrial', { report: 3 });
   const fa = path.join(tmp, 'ra.bin');
   const a = await HexDocument.openFile(fa);
   const res = await ext.getProHost().exportReport(a, a, uriOf(fa), uriOf(fa));
   assert.equal(res, undefined);
-  assert.match(state.modal[0].msg, /Compare report export is part of Hex Viewer Pro/);
+  assert.match(state.modal[0].msg, /Compare report export is part of Zovo Pro/);
   await a.dispose();
 });

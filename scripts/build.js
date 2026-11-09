@@ -5,7 +5,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const prod = process.argv.includes('--production');
 const common = { bundle: true, minify: prod, sourcemap: false, legalComments: 'none', logLevel: 'warning', absWorkingDir: root };
-// HEXV_TEST_PUBKEY: only for a gate build that unlocks Pro with a throwaway key. Release builds leave it unset.
+// HEXV_TEST_PUBKEY (SPKI base64): only for a gate build that unlocks Pro with a throwaway key. Release builds leave it unset.
 const testKey = process.env.HEXV_TEST_PUBKEY || '';
 if (testKey) console.log('GATE BUILD: a test license key is trusted. Do not release this build.');
 (async () => {

@@ -53,8 +53,7 @@
     "onCommand:hexViewer.openWith",
     "onCommand:hexViewer.openWalkthrough",
     "onCommand:hexViewer.findInFiles",
-    "onCommand:hexViewer.getPro",
-    "onCommand:hexViewer.enterLicenseKey"
+    "onUri"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -197,17 +196,22 @@
       },
       {
         "command": "hexViewer.getPro",
-        "title": "Get Hex Viewer Pro",
+        "title": "Get Zovo Pro (USD 15 once, all Zovo viewers)",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.unlockWithSponsors",
+        "title": "Unlock Zovo Pro with GitHub Sponsors",
         "category": "Hex Viewer"
       },
       {
         "command": "hexViewer.enterLicenseKey",
-        "title": "Enter Pro License Key",
+        "title": "Enter Zovo Pro License Key",
         "category": "Hex Viewer"
       },
       {
-        "command": "hexViewer.removeLicenseKey",
-        "title": "Remove Pro License Key",
+        "command": "hexViewer.removeLicense",
+        "title": "Remove Zovo Pro from This Editor",
         "category": "Hex Viewer"
       }
     ],

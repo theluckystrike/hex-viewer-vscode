@@ -16,6 +16,8 @@ Everything that was free stays free. New, with the optional Zovo Pro (USD 15 onc
 - Insert and delete are instant on files of any size: only a list of changes is kept until you save.
 - Safe save: when the size changes, a new copy is written in the same folder and then swapped in. Hex Viewer checks the free disk space first. Symbolic links and file permissions stay as they were.
 - Compare two files byte by byte: "Compare in Hex Viewer" in the Explorer menu (select two files) or the Compare... button. Side by side view, F7 and Shift+F7 for the next and previous difference, a count of differing bytes and areas, and marks on the scroll bar. Works on 4 GB and larger files.
+- Compare reads into reused buffers, so comparing two 4 GB files keeps memory flat.
+- The support links now include PayPal.
 
 ## 0.1.0 (2026-11-08)
 

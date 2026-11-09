@@ -163,7 +163,7 @@ test('webview HTML: strict CSP, nonce scripts, no remote origins', () => {
   assert.match(html, /img-src https:\/\/csp blob: data:/);
   assert.doesNotMatch(html, /connect-src/);
   const urls = html.match(/https?:\/\/[^"' )<]+/g) || [];
-  for (const u of urls) assert.match(u, /^https:\/\/(csp|res\/|marketplace\.visualstudio\.com\/|github\.com\/|www\.paypal\.me\/)/, u);
+  for (const u of urls) assert.match(u, /^https:\/\/(csp|res\/|marketplace\.visualstudio\.com\/|github\.com\/|www\.paypal\.me\/|www\.paypal\.com\/paypalme\/)/, u);
   assert.match(html, /a&quot;&lt;b&gt;\.bin/);
 });
 

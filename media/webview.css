@@ -132,3 +132,5 @@ button.primary:hover { background: var(--vscode-button-hoverBackground, var(--vs
 .sumrow { margin-top: 8px; }
 /* setting hexViewer.showProFeatures false (and no license): no Pro tab, button or badge */
 .nopro .tab[data-panel="struct"], .nopro .tab[data-panel="bm"], .nopro .sumrow, .nopro .withpro, .nopro .pro { display: none !important; }
+/* EXEC9: the custom format line (Structure tab): links inline with the text, no extra gap before the comma. */
+.customfmt .link { padding: 0; font-size: inherit; }

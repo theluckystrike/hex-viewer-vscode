@@ -29,9 +29,9 @@ const mem = b => HexDocument.fromBytes(Uint8Array.from(b), null);
 // ---------- license ----------
 
 test('license: the release build has no test key and only the shared module holds the live public key', () => {
-  const keys = require('../src/pro/keys.js');
-  assert.equal(keys.TEST_PUBKEY, '');
-  assert.equal(keys.PAYMENT_URL, undefined);
+  // a fresh process: this file sets TEST_PUBKEY for the host tests below
+  const out = require('child_process').execFileSync(process.execPath, ['-e', `const k = require(${JSON.stringify(path.join(__dirname, '..', 'src', 'pro', 'keys.js'))}); console.log(JSON.stringify([k.TEST_PUBKEY, k.PAYMENT_URL === undefined]))`], { encoding: 'utf8' });
+  assert.deepEqual(JSON.parse(out), ['', true]);
   for (const f of ['src/pro/keys.js', 'src/pro/index.js', 'src/license/license.js', 'src/license/index.js', 'src/license/sponsors.js']) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /PRIVATE KEY-----/);
   // the shared files are copied unchanged
   for (const f of ['index.js', 'license.js', 'sponsors.js']) {

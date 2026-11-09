@@ -41,7 +41,9 @@ const ext = require('../src/extension.js');
 const { buildHtml } = require('../src/html.js');
 const { validateWebviewMessage } = require('../src/core/protocol.js');
 
-const ctx = { subscriptions: [], extensionUri: uriOf('/ext'), globalState: { get() {}, update: async () => {} } };
+const secrets = new Map();
+const ctx = { subscriptions: [], extensionUri: uriOf('/ext'), globalState: { get() {}, update: async () => {} },
+  secrets: { get: async k => secrets.get(k), store: async (k, v) => { secrets.set(k, v); }, delete: async k => { secrets.delete(k); } } };
 ext.activate(ctx);
 const provider = vscodeMock.window.registered[0][1];
 const provider2 = vscodeMock.window.registered[1][1];

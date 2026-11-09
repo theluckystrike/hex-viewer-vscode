@@ -1,6 +1,7 @@
 // Hex Viewer webview. Draws only the rows on screen; bytes come from the extension host in 64 KB blocks.
 // The scroll bar is drawn here (not by the browser), so a 4 GB or larger file scrolls to its last row.
 import { hexOffset, fmtSize, fmtInt, parseOffset, inspect, textCells, byteForChar, parseHexPaste, ENCODINGS, hex2 } from '../core/bytes.js';
+import { createProUI } from './pro.js';
 
 const vscode = acquireVsCodeApi();
 const post = m => vscode.postMessage(m);
@@ -29,30 +30,34 @@ const S = {
   blocks: new Map(), pending: new Set(), copyFormats: [],
 };
 let el = {};
+let proUI = null;
 
 window.addEventListener('message', e => onMessage(e.data));
 window.addEventListener('error', e => post({ type: 'error', message: String(e.message || e.error) }));
 post({ type: 'ready' });
 
 function onMessage(m) {
+  if (proUI && proUI.onMessage(m)) return;
   switch (m.type) {
     case 'init': return init(m);
     case 'data': return onData(m);
-    case 'patch': return onPatch(m);
+    case 'patch': proUI && proUI.afterChange(); return onPatch(m);
     case 'saved': for (const b of S.blocks.values()) b.edited.clear(); return render();
-    case 'reset': S.size = m.size; S.sizeText = m.sizeText; dropCache(); clampCursor(); return render();
+    case 'reset': proUI && proUI.afterChange(); S.size = m.size; S.sizeText = m.sizeText; dropCache(); clampCursor(); return render();
     case 'resized':
+      proUI && proUI.afterChange();
       S.size = m.size; S.sizeText = m.sizeText; dropCache(); S.match = null;
       for (const off of m.edited || []) markEdited(off);
       clampCursor(); return render();
     case 'toggleInsert': return toggleInsert();
     case 'changed':
+      proUI && proUI.afterChange();
       S.size = m.size; S.sizeText = m.sizeText; dropCache(); clampCursor(); S.match = null;
       if (m.message) notice(m.message, 'warn');
       return render();
     case 'notice': return notice(m.message, m.level);
     case 'copied': return hint(m.text);
-    case 'goto': return gotoOffset(m.offset, true);
+    case 'goto': return m.length > 1 ? selectRange(m.offset, m.offset + m.length, true) : gotoOffset(m.offset, true);
     case 'find': el.find && el.find.focus(); el.find && el.find.select(); return;
     case 'findNext': return runSearch(!!m.backward);
     case 'searchProgress': if (m.id === S.searchId) el.findInfo.textContent = `Searching ${Math.floor((100 * m.done) / Math.max(1, m.total))}%`; return;
@@ -76,7 +81,19 @@ function applySettings(s, first) {
   if (!first && el.rows) { measure(); layout(); }
 }
 
-function persist() { vscode.setState({ bpr: S.bpr, encoding: S.encoding, le: S.le, inspector: S.inspector, cursor: S.cursor, insert: S.insert, mode: saved.mode }); }
+function persist() { vscode.setState({ bpr: S.bpr, encoding: S.encoding, le: S.le, inspector: S.inspector, cursor: S.cursor, insert: S.insert, mode: saved.mode, panel: saved.panel }); }
+
+/** Select [start, end) and show its first byte (Structure view, bookmarks, find in files). */
+function selectRange(start, end, focus) {
+  if (!el.grid) return;
+  commitPending(); S.pendingIns = null; S.nibble = 0; S.match = null;
+  const last = maxCursor();
+  S.cursor = Math.max(0, Math.min(last, start));
+  S.anchor = Math.max(0, Math.min(last, Math.max(start, end - 1)));
+  scrollToCursor(true);
+  announce(); persist();
+  if (focus) el.grid.focus();
+}
 
 /** Last cursor position: the last byte, or one past it in insert mode (to add bytes at the end). */
 function maxCursor() { return Math.max(0, S.insert ? S.size : S.size - 1); }
@@ -160,7 +177,9 @@ function init(m) {
   el.grid.append(el.view);
   el.leBtn = $('button', { class: 'link', title: 'Switch byte order', onclick: () => { S.le = !S.le; saved.le = S.le; persist(); renderInspector(); } });
   el.insBody = $('div', { class: 'ins' });
-  el.side = $('aside', { class: 'side', 'aria-label': 'Data inspector', hidden: !S.inspector }, $('h2', {}, 'Data inspector ', el.leBtn), el.insBody);
+  el.insPane = $('div', { class: 'pane', role: 'tabpanel' }, $('h2', {}, 'Data inspector ', el.leBtn), el.insBody);
+  proUI = createProUI({ $, post, S, el, render, selectRange, hint, esc, hexOffset, fmtInt, saved, persist, layout });
+  el.side = $('aside', { class: 'side', 'aria-label': 'Side panel', hidden: !S.inspector }, proUI.tabs, el.insPane, ...proUI.panes);
   el.main = $('div', { class: 'main' }, el.grid, el.side);
   el.status = $('div', { class: 'status' });
   el.stPos = $('span', { class: 'pos' });
@@ -185,6 +204,7 @@ function init(m) {
   document.addEventListener('paste', onPaste);
   document.addEventListener('cut', onCut);
   new ResizeObserver(() => layout()).observe(el.gridWrap);
+  proUI.start();
   for (const off of m.edited || []) markEdited(off);
   S.loaded = true;
   measure();
@@ -316,6 +336,7 @@ function render() {
     const start = row * bpr;
     if (start > S.size || (start === S.size && !S.insert)) break;
     const count = Math.min(bpr, S.size - start);
+    const marks = proUI && count > 0 ? proUI.rowMarks(start, count) : null;
     const rowBytes = bytesFrom(start, count + 3);
     if (rowBytes.length < count) missing = true;
     const cells = rowBytes.length >= count && count > 0 ? textCells(rowBytes, count, S.encoding, start, S.glyphs) : null;
@@ -331,7 +352,7 @@ function render() {
         continue;
       }
       const v = i < rowBytes.length ? rowBytes[i] : -1;
-      let cls = '';
+      let cls = marks ? marks[i] : '';
       if (v === 0) cls += ' z';
       if (multi && off >= s0 && off < s1) cls += ' sel';
       if (m && off >= m.start && off < m.end) cls += ' m';
@@ -382,7 +403,7 @@ function updateStatus() {
 }
 
 function renderInspector() {
-  if (!el.insBody || !S.inspector) return;
+  if (!el.insBody || !S.inspector || (proUI && proUI.state.panel !== 'inspector')) return;
   el.leBtn.textContent = S.le ? 'Little-endian' : 'Big-endian';
   el.leBtn.title = 'Byte order for the numbers below. Click to switch.';
   // With a selection, the inspector reads from its first byte (select 4 bytes, read them as one number).
@@ -498,6 +519,7 @@ function onGlobalKey(e) {
   if (mod && !e.shiftKey && !e.altKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); el.find.focus(); el.find.select(); return; }
   if (mod && !e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'G')) { e.preventDefault(); post({ type: 'gotoPrompt' }); return; }
   if (e.key === 'F3') { e.preventDefault(); runSearch(e.shiftKey); }
+  if (proUI && !inField() && proUI.onKey(e)) return;
 }
 
 function onKey(e) {
@@ -759,5 +781,6 @@ window.hexViewerProbe = () => {
     banner: el.banner && !el.banner.hidden ? el.banner.textContent : '', hint: el.stHint ? el.stHint.textContent : '', le: S.le,
     inspector: el.insBody ? [...el.insBody.querySelectorAll('.ir')].map(r => [r.children[0].textContent, r.children[1].textContent]) : [],
     status: el.status ? el.status.textContent : '', insert: S.insert, mode: el.modeBtn ? el.modeBtn.textContent : '',
+    pro: proUI ? proUI.probe() : null,
   };
 };

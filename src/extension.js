@@ -7,7 +7,9 @@ const { validateWebviewMessage } = require('./core/protocol');
 const { fmtSize, fmtInt, hexOffset, parseOffset, parsePattern, formatCopy, detectType, COPY_FORMATS } = require('./core/bytes');
 const { createRatingPrompt } = require('./rate');
 const { registerSupport, commandUris, showLinks } = require('./support');
-const { openCompare } = require('./compare');
+const { openCompare, hooks: compareHooks } = require('./compare');
+const { createPro } = require('./pro');
+const { createProHost } = require('./proHost');
 
 const VIEW_ANY = 'hexViewer.editor';     // "Open With" for every file
 const VIEW_BIN = 'hexViewer.binary';     // default editor for .bin, .dat, .img, .rom, .dmp, .dump
@@ -16,6 +18,7 @@ const EXT_ID = 'zovo.zovo-hex-viewer';
 const MAX_COPY = 32 << 20;
 const MAX_INSERT = 16 << 20;
 let rating = { success() {}, failure() {} };
+let proHost = null;
 
 function settings() {
   const c = vscode.workspace.getConfiguration('hexViewer');
@@ -58,6 +61,7 @@ class HexDoc {
   }
   post(m) { for (const p of this.panels) p.webview.postMessage(m).then(undefined, () => {}); }
   dispose() {
+    if (this.onDispose) this.onDispose();
     if (this.watcher) this.watcher.dispose();
     if (this.hex) this.hex.dispose();
   }
@@ -100,6 +104,11 @@ class HexEditorProvider {
       error = errorText(e);
     }
     const doc = new HexDoc(uri, hex, error);
+    if (hex && this.shared.docs) {
+      const key = uri.toString();
+      this.shared.docs.set(key, doc);
+      doc.onDispose = () => { if (this.shared.docs.get(key) === doc) this.shared.docs.delete(key); };
+    }
     if (hex && openContext && openContext.backupId) {
       try { hex.restoreBackup(Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.parse(openContext.backupId))).toString('utf8')); } catch {}
     }
@@ -148,7 +157,7 @@ class HexEditorProvider {
       showSupportLinks: showLinks(vscode, 'hexViewer'),
     });
     doc.panels.add(panel);
-    const me = { doc, panel, cursor: null, provider: this };
+    const me = { doc, panel, cursor: null, provider: this, disposed: false };
     let disposed = false, counted = false, searchId = 0;
     const post = m => (disposed ? Promise.resolve(false) : Promise.resolve(panel.webview.postMessage(m)).then(undefined, () => false));
     const setActive = () => { if (panel.active) { this.active = me; this.showStatus(); } else if (this.active === me) { this.active = null; this.showStatus(); } };
@@ -164,6 +173,10 @@ class HexEditorProvider {
     panel.webview.onDidReceiveMessage(raw => {
       const v = validateWebviewMessage(raw);
       if (!v.ok) return;
+      if (proHost && proHost.TYPES.has(v.msg.type)) {
+        if (!doc.hex) return;
+        return proHost.handle(me, v.msg, post).then(undefined, e => post({ type: 'notice', level: 'error', message: errorText(e) }));
+      }
       if (!EDITS.has(v.msg.type)) return handle(v.msg);
       queue = queue.then(() => handle(v.msg));
       return queue;
@@ -179,6 +192,9 @@ class HexEditorProvider {
             readOnly: !writable, readOnlyReason: writable ? '' : 'The file is read-only on disk.', settings: settings(),
             edited: doc.hex.editedIn(0, Number.MAX_SAFE_INTEGER, 200000), copyFormats: COPY_FORMATS,
           });
+          // "Find in files" opened this file at a match
+          const go = this.shared.pendingGoto && this.shared.pendingGoto.get(doc.uri.toString());
+          if (go) { this.shared.pendingGoto.delete(doc.uri.toString()); await post({ type: 'goto', offset: Math.min(go.offset, Math.max(0, doc.hex.size - 1)), length: go.length }); }
           return;
         }
         if (!doc.hex) return;
@@ -245,7 +261,7 @@ class HexEditorProvider {
       }
     };
     panel.onDidDispose(() => {
-      disposed = true; cfgSub.dispose(); doc.panels.delete(panel);
+      disposed = true; me.disposed = true; cfgSub.dispose(); doc.panels.delete(panel);
       if (this.active === me) { this.active = null; this.showStatus(); }
     });
   }
@@ -412,7 +428,11 @@ function activate(context) {
   status.command = 'hexViewer.goToOffset';
   status.tooltip = 'Hex Viewer: go to offset (Ctrl+G)';
   context.subscriptions.push(status);
-  const shared = { active: null, status, gotoBusy: false };
+  const shared = { active: null, status, gotoBusy: false, docs: new Map(), pendingGoto: new Map() };
+  const pro = createPro({ vscode, context, prefix: 'hexViewer', productName: 'Hex Viewer' });
+  proHost = createProHost({ vscode, context, pro, shared, viewType: VIEW_ANY });
+  compareHooks.report = (a, b, ua, ub) => proHost.exportReport(a, b, ua, ub);
+  compareHooks.pro = pro;
   for (const vt of VIEW_TYPES) {
     context.subscriptions.push(vscode.window.registerCustomEditorProvider(vt, new HexEditorProvider(context, shared), {
       supportsMultipleEditorsPerDocument: true,
@@ -450,4 +470,4 @@ function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, HexEditorProvider, VIEW_ANY, VIEW_BIN, errorText, settings, parseInsert };
+module.exports = { activate, deactivate, HexEditorProvider, VIEW_ANY, VIEW_BIN, errorText, settings, parseInsert, getProHost: () => proHost };

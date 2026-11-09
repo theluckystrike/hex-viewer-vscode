@@ -102,4 +102,48 @@ async function diffStats(a, b, shouldStop = () => false, progress = () => {}, bu
   return { bytes, runs, first, last: lastD, map: Array.from(map), identical: bytes === 0 };
 }
 
-module.exports = { findDiff, diffStats, CHUNK };
+/**
+ * Every differing run, in order: onRange({ start, length, a, b }) with up to `preview` bytes of each side.
+ * Bytes past the end of the shorter file come as one last run with `tail: 'a' | 'b'`.
+ * Stops after maxRanges runs (returns truncated: true). Returns { ranges, bytes, truncated, cancelled }.
+ */
+async function diffRanges(a, b, onRange, opts = {}) {
+  const { shouldStop = () => false, progress = () => {}, preview = 16, maxRanges = 1e6 } = opts;
+  const both = reader(a, b);
+  const min = Math.min(a.size, b.size), max = Math.max(a.size, b.size);
+  let run = null, ranges = 0, bytes = 0, last = Date.now();
+  const flush = async () => { if (run) { ranges++; bytes += run.length; await onRange(run); run = null; } };
+  for (let pos = 0; pos < min; pos += CHUNK) {
+    if (shouldStop()) return { ranges, bytes, cancelled: true };
+    const n = Math.min(CHUNK, min - pos);
+    const [x, y] = await both(pos, n);
+    if (Math.min(x.length, y.length) < n) throw new Error('A file got shorter on disk during the compare.');
+    if (same(x, y, n)) { await flush(); }
+    else {
+      for (let i = 0; i < n; i++) {
+        if (x[i] !== y[i]) {
+          if (!run) {
+            if (ranges >= maxRanges) return { ranges, bytes, truncated: true };
+            run = { start: pos + i, length: 0, a: [], b: [] };
+          }
+          if (run.a.length < preview) { run.a.push(x[i]); run.b.push(y[i]); }
+          run.length++;
+        } else if (run) await flush();
+      }
+    }
+    if (Date.now() - last > 250) { last = Date.now(); progress(pos + n, max); await tick(); }
+  }
+  await flush();
+  if (max > min) {
+    if (ranges >= maxRanges) return { ranges, bytes, truncated: true };
+    const longer = a.size > b.size ? a : b;
+    const head = await longer.read(min, Math.min(preview, max - min));
+    const r = { start: min, length: max - min, a: a.size > b.size ? Array.from(head) : [], b: b.size > a.size ? Array.from(head) : [], tail: a.size > b.size ? 'a' : 'b' };
+    ranges++; bytes += r.length;
+    await onRange(r);
+  }
+  progress(max, max);
+  return { ranges, bytes, truncated: false };
+}
+
+module.exports = { findDiff, diffStats, diffRanges, CHUNK };

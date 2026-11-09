@@ -2,7 +2,7 @@
   "name": "zovo-hex-viewer",
   "displayName": "Hex Viewer & Binary Viewer, Hex Editor (Large Files)",
   "description": "Hex viewer, binary viewer and hex editor for VS Code that opens files of any size (4 GB and more) in under a second. Insert and delete bytes, compare two files byte by byte, go to offset, find hex or text, a data inspector, copy as C array or base64. Free, works offline.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "zovo",
   "license": "MIT",
   "icon": "icon.png",
@@ -42,14 +42,19 @@
     "hex diff",
     "binary compare",
     "binary diff",
-    "insert bytes"
+    "insert bytes",
+    "binary template",
+    "struct viewer"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
     "onCustomEditor:hexViewer.editor",
     "onCustomEditor:hexViewer.binary",
     "onCommand:hexViewer.openWith",
-    "onCommand:hexViewer.openWalkthrough"
+    "onCommand:hexViewer.openWalkthrough",
+    "onCommand:hexViewer.findInFiles",
+    "onCommand:hexViewer.getPro",
+    "onCommand:hexViewer.enterLicenseKey"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -63,12 +68,24 @@
         "viewType": "hexViewer.binary",
         "displayName": "Hex Viewer",
         "selector": [
-          { "filenamePattern": "*.bin" },
-          { "filenamePattern": "*.dat" },
-          { "filenamePattern": "*.img" },
-          { "filenamePattern": "*.rom" },
-          { "filenamePattern": "*.dmp" },
-          { "filenamePattern": "*.dump" }
+          {
+            "filenamePattern": "*.bin"
+          },
+          {
+            "filenamePattern": "*.dat"
+          },
+          {
+            "filenamePattern": "*.img"
+          },
+          {
+            "filenamePattern": "*.rom"
+          },
+          {
+            "filenamePattern": "*.dmp"
+          },
+          {
+            "filenamePattern": "*.dump"
+          }
         ],
         "priority": "default"
       },
@@ -76,63 +93,351 @@
         "viewType": "hexViewer.editor",
         "displayName": "Hex Viewer (any file)",
         "selector": [
-          { "filenamePattern": "*" }
+          {
+            "filenamePattern": "*"
+          }
         ],
         "priority": "option"
       }
     ],
     "commands": [
-      { "command": "hexViewer.openWith", "title": "Open in Hex Viewer", "category": "Hex Viewer", "icon": "$(file-binary)" },
-      { "command": "hexViewer.goToOffset", "title": "Go to Offset", "category": "Hex Viewer" },
-      { "command": "hexViewer.find", "title": "Find Bytes or Text", "category": "Hex Viewer" },
-      { "command": "hexViewer.findNext", "title": "Find Next", "category": "Hex Viewer" },
-      { "command": "hexViewer.findPrevious", "title": "Find Previous", "category": "Hex Viewer" },
-      { "command": "hexViewer.compare", "title": "Compare in Hex Viewer", "category": "Hex Viewer", "icon": "$(diff)" },
-      { "command": "hexViewer.insertBytes", "title": "Insert Bytes...", "category": "Hex Viewer" },
-      { "command": "hexViewer.toggleInsert", "title": "Switch Insert / Overwrite Mode", "category": "Hex Viewer" },
-      { "command": "hexViewer.openWalkthrough", "title": "Get Started", "category": "Hex Viewer" },
-      { "command": "hexViewer.supportDeveloper", "title": "Support the developer", "category": "Hex Viewer" },
-      { "command": "hexViewer.moreViewers", "title": "More free viewers", "category": "Hex Viewer" }
+      {
+        "command": "hexViewer.openWith",
+        "title": "Open in Hex Viewer",
+        "category": "Hex Viewer",
+        "icon": "$(file-binary)"
+      },
+      {
+        "command": "hexViewer.goToOffset",
+        "title": "Go to Offset",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.find",
+        "title": "Find Bytes or Text",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.findNext",
+        "title": "Find Next",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.findPrevious",
+        "title": "Find Previous",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.compare",
+        "title": "Compare in Hex Viewer",
+        "category": "Hex Viewer",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "hexViewer.insertBytes",
+        "title": "Insert Bytes...",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.toggleInsert",
+        "title": "Switch Insert / Overwrite Mode",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.openWalkthrough",
+        "title": "Get Started",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.supportDeveloper",
+        "title": "Support the developer",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.moreViewers",
+        "title": "More free viewers",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.showStructure",
+        "title": "Show Structure (Binary Template)",
+        "category": "Hex Viewer Pro",
+        "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "hexViewer.chooseTemplate",
+        "title": "Read with Binary Template...",
+        "category": "Hex Viewer Pro"
+      },
+      {
+        "command": "hexViewer.addBookmark",
+        "title": "Add Bookmark at Selection",
+        "category": "Hex Viewer Pro"
+      },
+      {
+        "command": "hexViewer.nextBookmark",
+        "title": "Next Bookmark",
+        "category": "Hex Viewer Pro"
+      },
+      {
+        "command": "hexViewer.previousBookmark",
+        "title": "Previous Bookmark",
+        "category": "Hex Viewer Pro"
+      },
+      {
+        "command": "hexViewer.findInFiles",
+        "title": "Find Bytes in Files...",
+        "category": "Hex Viewer Pro",
+        "icon": "$(search)"
+      },
+      {
+        "command": "hexViewer.getPro",
+        "title": "Get Hex Viewer Pro",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.enterLicenseKey",
+        "title": "Enter Pro License Key",
+        "category": "Hex Viewer"
+      },
+      {
+        "command": "hexViewer.removeLicenseKey",
+        "title": "Remove Pro License Key",
+        "category": "Hex Viewer"
+      }
     ],
     "keybindings": [
-      { "command": "hexViewer.goToOffset", "key": "ctrl+g", "mac": "cmd+g", "when": "activeCustomEditorId =~ /^hexViewer\\./" }
+      {
+        "command": "hexViewer.goToOffset",
+        "key": "ctrl+g",
+        "mac": "cmd+g",
+        "when": "activeCustomEditorId =~ /^hexViewer\\./"
+      },
+      {
+        "command": "hexViewer.nextBookmark",
+        "key": "f2",
+        "when": "activeCustomEditorId =~ /^hexViewer\\./"
+      },
+      {
+        "command": "hexViewer.previousBookmark",
+        "key": "shift+f2",
+        "when": "activeCustomEditorId =~ /^hexViewer\\./"
+      },
+      {
+        "command": "hexViewer.addBookmark",
+        "key": "ctrl+f2",
+        "mac": "cmd+f2",
+        "when": "activeCustomEditorId =~ /^hexViewer\\./"
+      }
     ],
     "menus": {
       "explorer/context": [
-        { "command": "hexViewer.openWith", "when": "!explorerResourceIsFolder", "group": "navigation@20" },
-        { "command": "hexViewer.compare", "when": "!explorerResourceIsFolder", "group": "3_compare@30" }
+        {
+          "command": "hexViewer.openWith",
+          "when": "!explorerResourceIsFolder",
+          "group": "navigation@20"
+        },
+        {
+          "command": "hexViewer.compare",
+          "when": "!explorerResourceIsFolder",
+          "group": "3_compare@30"
+        },
+        {
+          "command": "hexViewer.findInFiles",
+          "when": "explorerResourceIsFolder",
+          "group": "4_search@60"
+        }
       ],
       "editor/title/context": [
-        { "command": "hexViewer.openWith", "when": "resourceScheme != untitled && !(activeCustomEditorId =~ /^hexViewer\\./)", "group": "1_open@20" }
+        {
+          "command": "hexViewer.openWith",
+          "when": "resourceScheme != untitled && !(activeCustomEditorId =~ /^hexViewer\\./)",
+          "group": "1_open@20"
+        }
       ],
       "editor/title": [
-        { "command": "hexViewer.openWith", "when": "resourceScheme != untitled && !(activeCustomEditorId =~ /^hexViewer\\./) && !isInDiffEditor", "group": "1_open@20" }
+        {
+          "command": "hexViewer.openWith",
+          "when": "resourceScheme != untitled && !(activeCustomEditorId =~ /^hexViewer\\./) && !isInDiffEditor",
+          "group": "1_open@20"
+        }
       ],
       "commandPalette": [
-        { "command": "hexViewer.openWith", "when": "resourceScheme != untitled && !(activeCustomEditorId =~ /^hexViewer\\./)" },
-        { "command": "hexViewer.goToOffset", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
-        { "command": "hexViewer.find", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
-        { "command": "hexViewer.findNext", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
-        { "command": "hexViewer.findPrevious", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
-        { "command": "hexViewer.insertBytes", "when": "activeCustomEditorId =~ /^hexViewer\\./" },
-        { "command": "hexViewer.toggleInsert", "when": "activeCustomEditorId =~ /^hexViewer\\./" }
+        {
+          "command": "hexViewer.openWith",
+          "when": "resourceScheme != untitled && !(activeCustomEditorId =~ /^hexViewer\\./)"
+        },
+        {
+          "command": "hexViewer.goToOffset",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.find",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.findNext",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.findPrevious",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.insertBytes",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.toggleInsert",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.showStructure",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.chooseTemplate",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.addBookmark",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.nextBookmark",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        },
+        {
+          "command": "hexViewer.previousBookmark",
+          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        }
       ]
     },
     "configuration": {
       "title": "Hex Viewer",
       "properties": {
-        "hexViewer.bytesPerRow": { "type": "number", "enum": [8, 16, 24, 32, 48, 64], "default": 16, "description": "Bytes in each row when a file opens. The toolbar changes it per tab." },
-        "hexViewer.encoding": { "type": "string", "enum": ["ascii", "latin1", "utf8", "utf16le", "utf16be", "ebcdic"], "enumDescriptions": ["ASCII: bytes 0x20 to 0x7E show as text.", "Latin-1 (ISO 8859-1).", "UTF-8: a character shows on its first byte.", "UTF-16 little-endian.", "UTF-16 big-endian.", "EBCDIC code page 037 (IBM mainframes)."], "default": "ascii", "description": "Encoding of the text column when a file opens. The toolbar changes it per tab." },
-        "hexViewer.controlChars": { "type": "string", "enum": ["dot", "glyph"], "enumDescriptions": ["Show control characters as a dot.", "Show control characters as symbols such as ␀ (NUL) and ␊ (line feed)."], "default": "dot", "description": "How the text column shows control characters." },
-        "hexViewer.uppercase": { "type": "boolean", "default": true, "description": "Show hex digits in upper case (4A) instead of lower case (4a)." },
-        "hexViewer.fontSize": { "type": "number", "default": 0, "minimum": 0, "maximum": 40, "description": "Font size of the byte grid in pixels. 0 uses the editor font size. The font is always the editor font." },
-        "hexViewer.copyFormat": { "type": "string", "enum": ["hexSpaced", "hex", "c", "python", "base64", "text", "latin1"], "enumDescriptions": ["Hex with spaces, 16 bytes a line: 4A 5B 00", "Hex without spaces: 4A5B00", "C array: unsigned char data[3] = { 0x4A, 0x5B, 0x00 };", "Python bytes: b'\\x4a\\x5b\\x00'", "Base64", "Text (UTF-8)", "Text (Latin-1)"], "default": "hexSpaced", "description": "What Ctrl+C (Cmd+C) copies from the hex column. The text column copies text. The toolbar's Copy as menu has every format." },
-        "hexViewer.littleEndian": { "type": "boolean", "default": true, "description": "Read numbers in the data inspector as little-endian. Click the byte order in the inspector to switch per tab." },
-        "hexViewer.showInspector": { "type": "boolean", "default": true, "description": "Show the data inspector panel when a file opens." },
-        "hexViewer.readOnly": { "type": "boolean", "default": false, "description": "Turn off byte editing. Files open as view only." },
-        "hexViewer.maxRemoteMB": { "type": "number", "default": 256, "minimum": 1, "maximum": 4096, "description": "Largest file to open from a remote or virtual file system (those are read in one piece). Local files of any size open, because they are read in small ranges." },
-        "hexViewer.askForRating": { "type": "boolean", "default": true, "description": "Ask one time for a Marketplace rating after you have used Hex Viewer on a few files over at least 2 days. You can answer \"Later\" or \"No thanks\". Nothing is sent anywhere." },
-        "hexViewer.showSupportLinks": { "type": "boolean", "default": true, "description": "Show the small Sponsor and More free viewers links in the status line of the viewer. The change shows in files you open next. Nothing is sent anywhere." }
+        "hexViewer.bytesPerRow": {
+          "type": "number",
+          "enum": [
+            8,
+            16,
+            24,
+            32,
+            48,
+            64
+          ],
+          "default": 16,
+          "description": "Bytes in each row when a file opens. The toolbar changes it per tab."
+        },
+        "hexViewer.encoding": {
+          "type": "string",
+          "enum": [
+            "ascii",
+            "latin1",
+            "utf8",
+            "utf16le",
+            "utf16be",
+            "ebcdic"
+          ],
+          "enumDescriptions": [
+            "ASCII: bytes 0x20 to 0x7E show as text.",
+            "Latin-1 (ISO 8859-1).",
+            "UTF-8: a character shows on its first byte.",
+            "UTF-16 little-endian.",
+            "UTF-16 big-endian.",
+            "EBCDIC code page 037 (IBM mainframes)."
+          ],
+          "default": "ascii",
+          "description": "Encoding of the text column when a file opens. The toolbar changes it per tab."
+        },
+        "hexViewer.controlChars": {
+          "type": "string",
+          "enum": [
+            "dot",
+            "glyph"
+          ],
+          "enumDescriptions": [
+            "Show control characters as a dot.",
+            "Show control characters as symbols such as ␀ (NUL) and ␊ (line feed)."
+          ],
+          "default": "dot",
+          "description": "How the text column shows control characters."
+        },
+        "hexViewer.uppercase": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show hex digits in upper case (4A) instead of lower case (4a)."
+        },
+        "hexViewer.fontSize": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 40,
+          "description": "Font size of the byte grid in pixels. 0 uses the editor font size. The font is always the editor font."
+        },
+        "hexViewer.copyFormat": {
+          "type": "string",
+          "enum": [
+            "hexSpaced",
+            "hex",
+            "c",
+            "python",
+            "base64",
+            "text",
+            "latin1"
+          ],
+          "enumDescriptions": [
+            "Hex with spaces, 16 bytes a line: 4A 5B 00",
+            "Hex without spaces: 4A5B00",
+            "C array: unsigned char data[3] = { 0x4A, 0x5B, 0x00 };",
+            "Python bytes: b'\\x4a\\x5b\\x00'",
+            "Base64",
+            "Text (UTF-8)",
+            "Text (Latin-1)"
+          ],
+          "default": "hexSpaced",
+          "description": "What Ctrl+C (Cmd+C) copies from the hex column. The text column copies text. The toolbar's Copy as menu has every format."
+        },
+        "hexViewer.littleEndian": {
+          "type": "boolean",
+          "default": true,
+          "description": "Read numbers in the data inspector as little-endian. Click the byte order in the inspector to switch per tab."
+        },
+        "hexViewer.showInspector": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the data inspector panel when a file opens."
+        },
+        "hexViewer.readOnly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn off byte editing. Files open as view only."
+        },
+        "hexViewer.maxRemoteMB": {
+          "type": "number",
+          "default": 256,
+          "minimum": 1,
+          "maximum": 4096,
+          "description": "Largest file to open from a remote or virtual file system (those are read in one piece). Local files of any size open, because they are read in small ranges."
+        },
+        "hexViewer.askForRating": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask one time for a Marketplace rating after you have used Hex Viewer on a few files over at least 2 days. You can answer \"Later\" or \"No thanks\". Nothing is sent anywhere."
+        },
+        "hexViewer.showSupportLinks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the small Sponsor and More free viewers links in the status line of the viewer. The change shows in files you open next. Nothing is sent anywhere."
+        },
+        "hexViewer.templateFolders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Folders with your own binary templates (JSON files) for the Structure view of Hex Viewer Pro. Absolute paths, ~ for your home folder, or paths inside the workspace. The .vscode/hex-templates folder of each workspace folder is always read. Templates are data, never code."
+        }
       }
     },
     "walkthroughs": [
@@ -145,27 +450,40 @@
             "id": "open",
             "title": "Open a file in Hex Viewer",
             "description": "Right-click any file in the Explorer and pick \"Open in Hex Viewer\". Files that end in .bin, .dat, .img, .rom, .dmp or .dump open in Hex Viewer when you click them. For an open tab, use \"Reopen Editor With...\" in the editor title menu.\n[Pick a file to open](command:hexViewer.openWith)",
-            "media": { "image": "images/hex-viewer-png.png", "altText": "A PNG file in Hex Viewer with the offset, hex and text columns and the data inspector." },
-            "completionEvents": ["onCommand:hexViewer.openWith"]
+            "media": {
+              "image": "images/hex-viewer-png.png",
+              "altText": "A PNG file in Hex Viewer with the offset, hex and text columns and the data inspector."
+            },
+            "completionEvents": [
+              "onCommand:hexViewer.openWith"
+            ]
           },
           {
             "id": "navigate",
             "title": "Go to an offset and find bytes",
             "description": "Press Ctrl+G (Cmd+G on macOS) and type an offset such as 0x1F40, 8000, +0x100 or end. Press Ctrl+F (Cmd+F) to find hex bytes (50 4B 03 04, ?? for any byte), text or UTF-16 text. Enter finds the next match.",
-            "media": { "markdown": "walkthrough/navigate.md" }
+            "media": {
+              "markdown": "walkthrough/navigate.md"
+            }
           },
           {
             "id": "edit",
             "title": "Copy, inspect and edit bytes",
             "description": "Select bytes with the mouse or Shift and the arrow keys, then copy them as hex, a C array, Python bytes, base64 or text. The data inspector reads the bytes at the cursor as integers, floats, times and a GUID. Type hex digits to overwrite bytes, press Insert to add bytes, Delete to remove them; Ctrl+Z undoes and Ctrl+S saves.",
-            "media": { "markdown": "walkthrough/edit.md" }
+            "media": {
+              "markdown": "walkthrough/edit.md"
+            }
           },
           {
             "id": "settings",
             "title": "Row width, text encoding and more",
             "description": "Choose bytes per row (8 to 64), the text encoding (ASCII, Latin-1, UTF-8, UTF-16, EBCDIC), the copy format and the font size.\n[Open settings](command:workbench.action.openSettings?%5B%22hexViewer%22%5D)",
-            "media": { "markdown": "walkthrough/settings.md" },
-            "completionEvents": ["onCommand:workbench.action.openSettings"]
+            "media": {
+              "markdown": "walkthrough/settings.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.action.openSettings"
+            ]
           }
         ]
       }

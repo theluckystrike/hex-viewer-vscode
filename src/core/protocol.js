@@ -7,6 +7,7 @@ const MAX_EDIT = 16 << 20;         // one paste: 16 MB
 const MODES = new Set(['hex', 'text', 'utf16']);
 const FORMATS = new Set(COPY_FORMATS.map(f => f[0]));
 const isOff = v => Number.isSafeInteger(v) && v >= 0;
+const FEATURES = new Set(['templates', 'bookmarks', 'report', 'findInFiles']);
 
 function validateWebviewMessage(m) {
   if (!m || typeof m !== 'object' || typeof m.type !== 'string') return { ok: false };
@@ -45,6 +46,24 @@ function validateWebviewMessage(m) {
       return { ok: true, msg: { type: 'cursor', offset: m.offset, selStart: m.selStart, selEnd: m.selEnd } };
     case 'error':
       return { ok: true, msg: { type: 'error', message: String(m.message || '').slice(0, 500) } };
+    // Hex Viewer Pro
+    case 'proState': case 'proGet': case 'proKey': case 'structDetect': case 'structPick': case 'bmList': case 'bmExport':
+      return { ok: true, msg: { type: m.type } };
+    case 'proExplain':
+      if (!FEATURES.has(m.feature)) return { ok: false };
+      return { ok: true, msg: { type: 'proExplain', feature: m.feature } };
+    case 'structParse':
+      if (m.id !== undefined && (typeof m.id !== 'string' || m.id.length > 200)) return { ok: false };
+      return { ok: true, msg: { type: 'structParse', id: m.id } };
+    case 'structExport':
+      if ((m.format !== 'json' && m.format !== 'c') || !Array.isArray(m.path) || m.path.length > 64 || !m.path.every(isOff)) return { ok: false };
+      return { ok: true, msg: { type: 'structExport', format: m.format, path: m.path.slice() } };
+    case 'bmAdd':
+      if (!isOff(m.start) || !isOff(m.end) || m.end <= m.start) return { ok: false };
+      return { ok: true, msg: { type: 'bmAdd', start: m.start, end: m.end } };
+    case 'bmEdit': case 'bmRemove':
+      if (typeof m.id !== 'string' || !/^[\w-]{1,40}$/.test(m.id)) return { ok: false };
+      return { ok: true, msg: { type: m.type, id: m.id } };
     default:
       return { ok: false };
   }

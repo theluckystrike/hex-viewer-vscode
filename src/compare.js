@@ -10,6 +10,8 @@ const { fmtSize } = require('./core/bytes');
 const { showLinks, commandUris } = require('./support');
 
 const MAX_READ = 1 << 20;
+// Set by the extension: the Pro compare report and the license state (Hex Viewer Pro).
+const hooks = { report: null, pro: null };
 const isOff = v => Number.isSafeInteger(v) && v >= 0;
 
 async function openDoc(uri) {
@@ -39,7 +41,7 @@ async function pickPair(uri, uris, activeUri) {
 function validate(m) {
   if (!m || typeof m !== 'object') return null;
   switch (m.type) {
-    case 'ready': case 'stats': case 'cancel': return { type: m.type };
+    case 'ready': case 'stats': case 'cancel': case 'report': case 'proGet': case 'proKey': return { type: m.type };
     case 'read': return isOff(m.offset) && Number.isSafeInteger(m.length) && m.length > 0 && m.length <= MAX_READ ? { type: 'read', offset: m.offset, length: m.length } : null;
     case 'diff': return isOff(m.from) && Number.isSafeInteger(m.id) ? { type: 'diff', from: m.from, backward: !!m.backward, id: m.id } : null;
     case 'error': return { type: 'error', message: String(m.message || '').slice(0, 500) };
@@ -85,8 +87,11 @@ async function openCompare(context, uri, uris, activeUri) {
     try {
       if (m.type === 'ready') {
         const cfg = vscode.workspace.getConfiguration('hexViewer');
-        await post({ type: 'init', a: label(ua, a), b: label(ub, b), settings: { uppercase: cfg.get('uppercase', true), fontSize: cfg.get('fontSize', 0) } });
+        await post({ type: 'init', a: label(ua, a), b: label(ub, b), settings: { uppercase: cfg.get('uppercase', true), fontSize: cfg.get('fontSize', 0) }, licensed: !!(hooks.pro && hooks.pro.licensed) });
         return;
+      }
+      if (m.type === 'report') { if (hooks.report) await hooks.report(a, b, ua, ub); return; }
+      if (m.type === 'proGet' || m.type === 'proKey') { if (hooks.pro) await (m.type === 'proGet' ? hooks.pro.getPro() : hooks.pro.enterKey()); return;
       }
       if (m.type === 'read') {
         const [x, y] = await Promise.all([a.read(m.offset, m.length), b.read(m.offset, m.length)]);
@@ -118,8 +123,9 @@ async function openCompare(context, uri, uris, activeUri) {
       await post({ type: 'notice', level: 'error', message: String((e && e.message) || e) });
     }
   });
-  panel.onDidDispose(async () => { disposed = true; await a.dispose(); await b.dispose(); });
+  const proSub = hooks.pro && hooks.pro.onDidChange(v => post({ type: 'pro', licensed: v }));
+  panel.onDidDispose(async () => { disposed = true; if (proSub) proSub.dispose(); await a.dispose(); await b.dispose(); });
   return panel;
 }
 
-module.exports = { openCompare, validate };
+module.exports = { openCompare, validate, hooks };

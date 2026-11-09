@@ -21,6 +21,12 @@ const BUILTIN = [
   require('../templates/macho.json'),
   require('../templates/class.json'),
   require('../templates/pcap.json'),
+  require('../templates/uf2.json'),
+  require('../templates/fdt.json'),
+  require('../templates/uimage.json'),
+  require('../templates/bootimg.json'),
+  require('../templates/wasm.json'),
+  require('../templates/dex.json'),
 ];
 
 module.exports = { BUILTIN };

@@ -10,7 +10,7 @@ const { writeReport } = require('./core/report');
 const { searchFiles } = require('./core/multisearch');
 const { checksums } = require('./core/checksum');
 const { parsePattern, hexOffset, fmtInt, fmtSize, hex2 } = require('./core/bytes');
-const { createCustomOffer, extensionOf } = require('./custom-offer');
+const { createCustomOffer, extensionOf, ORDER_TEXT } = require('./custom-offer');
 
 const MAX_TEMPLATE_FILES = 200;
 const MAX_TEMPLATE_BYTES = 1 << 20;
@@ -23,7 +23,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
   const saveBookmarks = () => context.globalState.update(BM_KEY, bookmarks.toJSON());
   let userTemplates = { list: [], problems: [], at: 0 };
   // EXEC9: the USD 299 custom format line, at most once per session, only where no template applies to the file.
-  const custom = createCustomOffer({ vscode, product: 'Hex Viewer', version: context.extension && context.extension.packageJSON ? context.extension.packageJSON.version : '' });
+  const custom = createCustomOffer({ vscode, product: 'Hex Viewer', version: context.extension && context.extension.packageJSON ? context.extension.packageJSON.version : '', withOrder: true });
   const formatOf = me => extensionOf(me.doc.uri.path) || 'files without a known extension';
 
   // ---------- templates ----------
@@ -95,9 +95,12 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     await post({ type: 'structInfo', licensed: pro.licensed, onSale: pro.onSale, trials: pro.trials(), structTrial: !!me.structTrial, best: pick ? { id: pick.id, name: pick.name } : null, matches: found.map(f => f.template.id), count: allTemplates().length, problems: u.problems.slice(0, 5) });
   }
 
+  // EXEC13 (0.3.4): the Structure view is free for the root and its direct fields, with no try used. The nested
+  // fields are Zovo Pro: a click on "N nested fields: Zovo Pro" uses one of the 3 free tries (proTry 'templates'),
+  // and that try opens every level of this tab, edits and template changes included. Only the shown levels are sent.
+  const fullStruct = me => pro.licensed || !!me.structTrial;
+
   async function parseFor(me, post, id) {
-    // a free try opens the Structure view of this tab; edits and template changes in the same tab are part of it
-    if (!pro.licensed && !me.structTrial) { await post({ type: 'struct', locked: true, trial: pro.trialLeft('templates') }); return; }
     const run = me.structRun = (me.structRun || 0) + 1;
     const t = id ? byId(id) : (await detectFor(me)).pick;
     if (!t) { await post({ type: 'struct', none: true, count: allTemplates().length }); return; }
@@ -105,12 +108,12 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     const r = await T.parse(t, me.doc.hex, { shouldStop: () => me.structRun !== run || me.disposed });
     if (me.structRun !== run) return;
     me.struct = { template: t, result: r };
-    await post({ type: 'struct', id: t.id, name: t.name, user: !!t.source, tree: T.toWire(r.root), error: r.error, nodes: r.nodes, ms: r.ms });
+    const full = fullStruct(me);
+    await post({ type: 'struct', id: t.id, name: t.name, user: !!t.source, tree: full ? T.toWire(r.root) : T.toWireTop(r.root), free: !full, trial: pro.trialLeft('templates'), error: r.error, nodes: r.nodes, ms: r.ms });
   }
 
   async function pickTemplate(me, post) {
-    if (!me.structTrial && !(await pro.gate('templates'))) return;
-    if (!pro.licensed) me.structTrial = true;
+    // free since 0.3.4: any template reads the top level; nested fields stay behind the same Pro row
     const { found } = await detectFor(me);
     const matches = new Set(found.map(f => f.template.id));
     const items = allTemplates().map(t => ({ label: t.name, description: (matches.has(t.id) ? 'matches this file' : '') + (t.source ? (matches.has(t.id) ? ', ' : '') + 'your template' : ''), detail: t.source || (t.extensions || []).map(e => '.' + e).join(' '), id: t.id }))
@@ -121,13 +124,19 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     const grant = !matches.size && !choiceFor(me.doc.uri) ? custom.claim() : null;
     if (grant) {
       if (sep) items.push({ kind: sep, label: 'No template for this format' });
-      items.push({ label: (sep ? '' : 'No template for this format. ') + '$(comment-discussion) Request one (free)', description: 'format request form on GitHub', id: '__customRequest' },
-        { label: `$(heart) Or we build it for USD ${grant.usd} once`, description: 'GitHub Sponsors', id: '__customTier' });
+      items.push({ label: (sep ? '' : 'No template for this format. ') + '$(comment-discussion) Request one (free)', description: 'format request form on GitHub', id: '__customRequest' });
+      // EXEC13: the USD 49 template order, Sponsors first, PayPal second; hidden while a funding value is empty
+      if (grant.order) {
+        items.push({ label: `$(package) ${ORDER_TEXT(grant.order.usd)}`, description: 'GitHub Sponsors', id: '__customOrder' });
+        if (grant.order.paypal) items.push({ label: `$(credit-card) The same template order by PayPal, USD ${grant.order.usd}`, description: 'PayPal', id: '__customOrderPaypal' });
+      }
+      items.push({ label: `$(heart) Or we build it for USD ${grant.usd} once`, description: 'GitHub Sponsors', id: '__customTier' });
     } else if (custom.available()) items.push({ label: '$(question) None of these matches this file', id: '__none' });
-    const p = await vscode.window.showQuickPick(items, { title: 'Hex Viewer Pro: read this file with a template', matchOnDescription: true, matchOnDetail: true });
+    const p = await vscode.window.showQuickPick(items, { title: 'Hex Viewer: read this file with a template', matchOnDescription: true, matchOnDetail: true });
     if (!p) return;
     if (p.id === '__folders') { vscode.commands.executeCommand('workbench.action.openSettings', 'hexViewer.templateFolders'); return; }
-    if (p.id === '__customRequest' || p.id === '__customTier') { await custom.open(p.id === '__customTier' ? 'tier' : 'request', formatOf(me)); return; }
+    const CUSTOM_IDS = { __customRequest: 'request', __customTier: 'tier', __customOrder: 'order', __customOrderPaypal: 'orderPaypal' };
+    if (CUSTOM_IDS[p.id]) { await custom.open(CUSTOM_IDS[p.id], formatOf(me)); return; }
     if (p.id === '__none') { me.noneMatches = true; return claimCustom(me, post); }
     setChoice(me.doc.uri, p.id);
     await parseFor(me, post, p.id);
@@ -138,7 +147,7 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     if (!custom.available()) return;
     if (!me.noneMatches && (await detectFor(me)).pick) return;
     const g = custom.claim();
-    if (g) await post({ type: 'customGrant', usd: g.usd });
+    if (g) await post({ type: 'customGrant', usd: g.usd, order: g.order || null });
   }
 
   function nodeAt(root, idx) {
@@ -226,7 +235,8 @@ function createProHost({ vscode, context, pro, shared, viewType }) {
     switch (msg.type) {
       case 'proState': return post({ type: 'pro', licensed: pro.licensed, onSale: pro.onSale, trials: pro.trials() });
       case 'proTry':
-        if (msg.feature === 'templates') { if (pro.licensed || me.structTrial || (await pro.gate('templates'))) { if (!pro.licensed) me.structTrial = true; await sendInfo(me, post); return parseFor(me, post); } return; }
+        // the "N nested fields: Zovo Pro" row: one free try opens every level of this tab; with none left, the Pro panel
+        if (msg.feature === 'templates') { if (pro.licensed || me.structTrial || (await pro.gate('templates'))) { if (!pro.licensed) me.structTrial = true; await sendInfo(me, post); return parseFor(me, post, me.struct && me.struct.template ? me.struct.template.id : undefined); } return; }
         if (msg.feature === 'bookmarks') { const c = me.cursor || { selStart: 0, selEnd: 1 }; return addBookmark(me, c.selStart, Math.max(c.selEnd, c.selStart + 1)); }
         return;
       case 'proGet': return pro.getPro();

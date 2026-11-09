@@ -4,7 +4,15 @@
             [{ "offset": 0, "hex": "CA FE BA BE" }, { "offset": 4, "type": "u32", "endian": "big", "min": 1, "max": 30 }]],
   "endian": "big",
   "structs": {
-    "File": [ { "name": "macho", "type": "MachO" } ],
+    "File": [
+      { "name": "macho", "type": "MachO" },
+      { "name": "kind", "value": "macho.magic", "format": "hex", "enum": { "0xFEEDFACE": "32-bit, big-endian", "0xFEEDFACF": "64-bit, big-endian", "0xCEFAEDFE": "32-bit, little-endian", "0xCFFAEDFE": "64-bit, little-endian", "0xCAFEBABE": "Universal (fat) binary" } },
+      { "name": "cpu", "value": "macho.header.cputype", "enum": "Cpu", "if": "macho.magic != 0xCAFEBABE" },
+      { "name": "file_type", "value": "macho.header.filetype", "enum": { "1": "Object", "2": "Executable", "3": "Fixed VM library", "4": "Core", "5": "Preloaded", "6": "Dynamic library", "7": "Dynamic linker", "8": "Bundle", "9": "Dylib stub", "10": "dSYM companion", "11": "Kext bundle", "12": "Fileset" }, "if": "macho.magic != 0xCAFEBABE" },
+      { "name": "load_command_count", "value": "macho.header.ncmds", "format": "dec", "if": "macho.magic != 0xCAFEBABE" },
+      { "name": "architecture_count", "value": "macho.fat.arch_count", "format": "dec", "if": "macho.magic == 0xCAFEBABE" },
+      { "name": "first_architecture", "value": "macho.fat.archs[0].cputype", "enum": "Cpu", "if": "macho.magic == 0xCAFEBABE && macho.fat.arch_count > 0" }
+    ],
     "MachO": [
       { "name": "magic", "type": "u32", "format": "hex", "endian": "big", "enum": { "0xFEEDFACE": "32-bit, big-endian", "0xFEEDFACF": "64-bit, big-endian", "0xCEFAEDFE": "32-bit, little-endian", "0xCFFAEDFE": "64-bit, little-endian", "0xCAFEBABE": "Universal (fat) binary" } },
       { "name": "fat", "type": "Fat", "if": "magic == 0xCAFEBABE" },

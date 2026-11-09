@@ -52,7 +52,7 @@ function validateWebviewMessage(m) {
     case 'customClaim':
       return { ok: true, msg: { type: 'customClaim' } };
     case 'customOpen':
-      if (m.which !== 'request' && m.which !== 'tier') return { ok: false };
+      if (!['request', 'tier', 'order', 'orderPaypal'].includes(m.which)) return { ok: false };
       return { ok: true, msg: { type: 'customOpen', which: m.which } };
     case 'proExplain': case 'proTry':
       if (!FEATURES.has(m.feature)) return { ok: false };

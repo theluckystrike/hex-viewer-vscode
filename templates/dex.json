@@ -1,0 +1,85 @@
+{
+  "id": "dex", "name": "Android DEX file (Dalvik bytecode)", "extensions": ["dex"],
+  "match": [[{ "offset": 0, "hex": "64 65 78 0A" }, { "offset": 7, "hex": "00" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "magic", "type": "char", "length": 8, "comment": "dex, a line break, the format version and a zero byte" },
+      { "name": "checksum", "type": "u32", "format": "hex", "comment": "Adler-32 of the rest of the file" },
+      { "name": "signature", "type": "bytes", "length": 20, "comment": "SHA-1 of the rest of the file" },
+      { "name": "file_size", "type": "u32" },
+      { "name": "header_size", "type": "u32" },
+      { "name": "endian_tag", "type": "u32", "format": "hex", "expect": 305419896 },
+      { "name": "link_size", "type": "u32" }, { "name": "link_off", "type": "u32", "format": "hex" },
+      { "name": "map_off", "type": "u32", "format": "hex" },
+      { "name": "string_ids_size", "type": "u32" }, { "name": "string_ids_off", "type": "u32", "format": "hex" },
+      { "name": "type_ids_size", "type": "u32" }, { "name": "type_ids_off", "type": "u32", "format": "hex" },
+      { "name": "proto_ids_size", "type": "u32" }, { "name": "proto_ids_off", "type": "u32", "format": "hex" },
+      { "name": "field_ids_size", "type": "u32" }, { "name": "field_ids_off", "type": "u32", "format": "hex" },
+      { "name": "method_ids_size", "type": "u32" }, { "name": "method_ids_off", "type": "u32", "format": "hex" },
+      { "name": "class_defs_size", "type": "u32" }, { "name": "class_defs_off", "type": "u32", "format": "hex" },
+      { "name": "data_size", "type": "u32" }, { "name": "data_off", "type": "u32", "format": "hex" },
+      { "name": "string_ids", "type": "StringId", "count": "min(string_ids_size, 2000)", "at": "string_ids_off", "peek": true, "if": "string_ids_size > 0 && string_ids_off + 4 <= size()" },
+      { "name": "type_ids", "type": "TypeId", "count": "min(type_ids_size, 1500)", "at": "type_ids_off", "peek": true, "if": "type_ids_size > 0 && type_ids_off + 4 <= size() && string_ids_size > 0 && string_ids_off + 4 <= size()" },
+      { "name": "proto_ids", "type": "ProtoId", "count": "min(proto_ids_size, 500)", "at": "proto_ids_off", "peek": true, "if": "proto_ids_size > 0 && proto_ids_off + 12 <= size() && string_ids_size > 0 && string_ids_off + 4 <= size()" },
+      { "name": "field_ids", "type": "FieldId", "count": "min(field_ids_size, 1000)", "at": "field_ids_off", "peek": true, "if": "field_ids_size > 0 && field_ids_off + 8 <= size() && string_ids_size > 0 && string_ids_off + 4 <= size()" },
+      { "name": "method_ids", "type": "MethodId", "count": "min(method_ids_size, 1500)", "at": "method_ids_off", "peek": true, "if": "method_ids_size > 0 && method_ids_off + 8 <= size() && string_ids_size > 0 && string_ids_off + 4 <= size()" },
+      { "name": "class_defs", "type": "ClassDef", "count": "min(class_defs_size, 500)", "at": "class_defs_off", "peek": true, "if": "class_defs_size > 0 && class_defs_off + 32 <= size() && type_ids_size > 0 && type_ids_off + 4 <= size() && string_ids_size > 0 && string_ids_off + 4 <= size()" },
+      { "name": "map_list", "type": "MapList", "at": "map_off", "peek": true, "if": "map_off > 0 && map_off + 4 <= size()" }
+    ],
+    "StringId": { "label": "string_data_off > 0 && string_data_off < size() ? text : ''", "fields": [
+      { "name": "string_data_off", "type": "u32", "format": "hex" },
+      { "name": "utf16_size", "type": "uleb128", "at": "string_data_off", "peek": true, "if": "string_data_off > 0 && string_data_off < size()" },
+      { "name": "text", "type": "zstring", "length": 1024, "at": "string_data_off + utf16_size.size", "peek": true, "if": "string_data_off > 0 && string_data_off < size()" },
+      { "name": "text", "hidden": true, "value": "''", "if": "!(string_data_off > 0 && string_data_off < size())" }
+    ] },
+    "TypeId": { "label": "desc", "fields": [
+      { "name": "descriptor_idx", "type": "u32" },
+      { "name": "desc", "hidden": true, "value": "descriptor_idx < string_ids.length ? string_ids[descriptor_idx].text : ''" },
+      { "name": "descriptor", "value": "desc" }
+    ] },
+    "ProtoId": { "label": "shorty_idx < string_ids.length ? string_ids[shorty_idx].text : ''", "fields": [
+      { "name": "shorty_idx", "type": "u32" },
+      { "name": "return_type_idx", "type": "u32" },
+      { "name": "parameters_off", "type": "u32", "format": "hex" },
+      { "name": "shorty", "value": "shorty_idx < string_ids.length ? string_ids[shorty_idx].text : ''" }
+    ] },
+    "FieldId": { "label": "name_idx < string_ids.length ? string_ids[name_idx].text : ''", "fields": [
+      { "name": "class_idx", "type": "u16" },
+      { "name": "type_idx", "type": "u16" },
+      { "name": "name_idx", "type": "u32" },
+      { "name": "name", "value": "name_idx < string_ids.length ? string_ids[name_idx].text : ''" }
+    ] },
+    "MethodId": { "label": "name_idx < string_ids.length ? string_ids[name_idx].text : ''", "fields": [
+      { "name": "class_idx", "type": "u16" },
+      { "name": "proto_idx", "type": "u16" },
+      { "name": "name_idx", "type": "u32" },
+      { "name": "name", "value": "name_idx < string_ids.length ? string_ids[name_idx].text : ''" }
+    ] },
+    "ClassDef": { "label": "class_idx < type_ids.length ? type_ids[class_idx].desc : ''", "fields": [
+      { "name": "class_idx", "type": "u32" },
+      { "name": "access_flags", "type": "u32", "flags": "Access" },
+      { "name": "superclass_idx", "type": "u32" },
+      { "name": "interfaces_off", "type": "u32", "format": "hex" },
+      { "name": "source_file_idx", "type": "u32" },
+      { "name": "annotations_off", "type": "u32", "format": "hex" },
+      { "name": "class_data_off", "type": "u32", "format": "hex" },
+      { "name": "static_values_off", "type": "u32", "format": "hex" },
+      { "name": "class_name", "value": "class_idx < type_ids.length ? type_ids[class_idx].desc : ''" }
+    ] },
+    "MapList": [
+      { "name": "size_", "type": "u32" },
+      { "name": "items", "type": "MapItem", "count": "min(size_, 64)" }
+    ],
+    "MapItem": { "label": "type", "fields": [
+      { "name": "type", "type": "u16", "enum": "MapType" },
+      { "name": "unused", "type": "u16" },
+      { "name": "size_", "type": "u32" },
+      { "name": "offset", "type": "u32", "format": "hex" }
+    ] }
+  },
+  "enums": {
+    "MapType": { "0x0": "header_item", "0x1": "string_id_item", "0x2": "type_id_item", "0x3": "proto_id_item", "0x4": "field_id_item", "0x5": "method_id_item", "0x6": "class_def_item", "0x7": "call_site_id_item", "0x8": "method_handle_item", "0x1000": "map_list", "0x1001": "type_list", "0x1002": "annotation_set_ref_list", "0x1003": "annotation_set_item", "0x2000": "class_data_item", "0x2001": "code_item", "0x2002": "string_data_item", "0x2003": "debug_info_item", "0x2004": "annotation_item", "0x2005": "encoded_array_item", "0x2006": "annotations_directory_item", "0xF000": "hiddenapi_class_data_item" }
+  },
+  "flags": { "Access": { "0x1": "public", "0x2": "private", "0x4": "protected", "0x8": "static", "0x10": "final", "0x20": "synchronized", "0x200": "interface", "0x400": "abstract", "0x1000": "synthetic", "0x2000": "annotation", "0x4000": "enum" } }
+}

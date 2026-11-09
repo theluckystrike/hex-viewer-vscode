@@ -134,3 +134,8 @@ button.primary:hover { background: var(--vscode-button-hoverBackground, var(--vs
 .nopro .tab[data-panel="struct"], .nopro .tab[data-panel="bm"], .nopro .sumrow, .nopro .withpro, .nopro .pro { display: none !important; }
 /* EXEC9: the custom format line (Structure tab): links inline with the text, no extra gap before the comma. */
 .customfmt .link { padding: 0; font-size: inherit; }
+/* 0.3.4: the one row in place of nested fields in the free Structure view */
+.tn.nestpro .nm { color: var(--vscode-textLink-foreground, #3794ff); }
+.tn.nestpro:hover .nm, .tn.nestpro:focus .nm { text-decoration: underline; }
+.tn.nestpro .ty { font-size: 11px; }
+.customfmt .cfo { margin: 2px 0 0 10px; }

@@ -55,7 +55,7 @@ const origLoad = Module._load;
 Module._load = function (req, ...rest) { return req === 'vscode' ? vscodeMock : origLoad.call(this, req, ...rest); };
 
 const CO = require('../../src/custom-offer.js');
-if (emptyKey) CO.FUNDING_CUSTOM[emptyKey] = emptyKey === 'custom_format_usd' ? 0 : '';
+if (emptyKey) CO.FUNDING_CUSTOM[emptyKey] = /_usd$/.test(emptyKey) ? 0 : '';
 const ext = require('../../src/extension.js');
 const ctx = {
   subscriptions: [], extensionUri: uriOf('/ext'), extension: { packageJSON: { version: '0.3.3' } },
@@ -116,6 +116,13 @@ async function open(file) {
     await v.send({ type: 'structPick' });
     await v.send({ type: 'customClaim' });
     r.grants = v.grants().length;
+  } else if (scenario === 'picker-order') {
+    // EXEC13: the USD 49 order in the picker, Sponsors then PayPal (two sessions, the line shows once per session)
+    const v = await open(nomatch);
+    pickAnswer = items => items.find(i => i.id === '__customOrder');
+    await v.send({ type: 'structPick' });
+    await v.send({ type: 'customOpen', which: 'orderPaypal' });
+    pickAnswer = null;
   } else if (scenario === 'picker-none') {
     const v = await open(png);
     pickAnswer = items => items.find(i => i.id === '__none');

@@ -1,6 +1,8 @@
 // Hex Viewer Pro in the webview: the side panel tabs (Inspector, Structure, Bookmarks), the Structure tree,
-// the bookmark list and the grid marks for both. Without a license the Pro tabs explain themselves when
+// the bookmark list and the grid marks for both. Without a license the Pro parts explain themselves when
 // clicked (with Get Pro and Enter key); nothing opens on its own.
+// 0.3.4 (EXEC13): the Structure tab is free for the root and its direct fields. A field with nested fields shows,
+// when the user opens it, one row "N nested fields: Zovo Pro"; a click on that row is a Pro use (3 free tries).
 
 export function createProUI(api) {
   const { $, post, S, el, render, selectRange, hint, esc, hexOffset, fmtInt, saved, persist } = api;
@@ -18,7 +20,7 @@ export function createProUI(api) {
     if (pro) b.append(badge());
     return b;
   };
-  u.tabs = $('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Side panel' }, tab('inspector', 'Inspector'), tab('struct', 'Structure', true), tab('bm', 'Bookmarks', true));
+  u.tabs = $('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Side panel' }, tab('inspector', 'Inspector'), tab('struct', 'Structure'), tab('bm', 'Bookmarks', true));
   u.struct = $('div', { class: 'pane struct', role: 'tabpanel', hidden: true });
   u.bm = $('div', { class: 'pane bms', role: 'tabpanel', hidden: true });
 
@@ -30,7 +32,7 @@ export function createProUI(api) {
     u.bm.hidden = id !== 'bm';
     if (byUser && id === 'struct') P.userAct = true;
     if (byUser && el.side.hidden) { S.inspector = true; el.side.hidden = false; el.insBtn.setAttribute('aria-pressed', 'true'); persist(); api.layout(); }
-    if (id === 'struct') { if (!P.info) post({ type: 'structDetect' }); if ((P.licensed || P.structTrial) && !P.tree && !P.busy) parse(); drawStruct(); }
+    if (id === 'struct') { if (!P.info) post({ type: 'structDetect' }); if (!P.tree && !P.busy && !P.none) parse(); drawStruct(); }
     if (id === 'bm') { post({ type: 'bmList' }); drawBookmarks(); }
     render();
   }
@@ -53,10 +55,20 @@ export function createProUI(api) {
   // ---------- custom format line (EXEC9) ----------
   // Asked for only after the user opened the Structure tab or pressed a button there, and only while no template
   // applies. The host checks that again and hands it out once per session. Never drawn on open, no popup.
+  const CUSTOM_TITLES = { request: 'Opens the format request form on GitHub in the browser', orderPaypal: 'Opens PayPal in the browser', tier: 'Opens the GitHub Sponsors tier in the browser' };
   function customLine() {
     const p = $('p', { class: 'hintp customfmt' });
-    const parts = [{ text: 'No template for this format. ' }, { link: 'request', text: 'Request one (free)' }, { text: ', or ' }, { link: 'tier', text: `we build it for USD ${P.custom.usd} once` }, { text: '.' }];
-    for (const x of parts) p.append(x.link ? $('button', { class: 'link', title: x.link === 'tier' ? 'Opens the GitHub Sponsors tier in the browser' : 'Opens the format request form on GitHub in the browser', text: x.text, onclick: () => post({ type: 'customOpen', which: x.link }) }) : document.createTextNode(x.text));
+    const title = x => (x.link === 'order' ? `Opens the "USD ${P.custom.order.usd} one time" GitHub Sponsors tier in the browser` : CUSTOM_TITLES[x.link]);
+    const link = x => $('button', { class: 'link', title: title(x), text: x.text, onclick: () => post({ type: 'customOpen', which: x.link }) });
+    const put = (box, parts) => { for (const x of parts) box.append(x.link ? link(x) : document.createTextNode(x.text)); };
+    const o = P.custom.order;
+    if (!o) { put(p, [{ text: 'No template for this format. ' }, { link: 'request', text: 'Request one (free)' }, { text: ', or ' }, { link: 'tier', text: `we build it for USD ${P.custom.usd} once` }, { text: '.' }]); return p; }
+    // EXEC13: three choices, one per line: free request, the USD 49 template order (Sponsors first, PayPal second), USD 299
+    put(p, [{ text: 'No template for this format.' }]);
+    const line = parts => { const d = $('div', { class: 'cfo' }); put(d, parts); p.append(d); };
+    line([{ link: 'request', text: 'Request one (free)' }]);
+    line([{ link: 'order', text: `Template for your format in 2 working days: USD ${o.usd}, Zovo Pro included` }, ...(o.paypal ? [{ text: ' (GitHub Sponsors, or ' }, { link: 'orderPaypal', text: 'PayPal' }, { text: ')' }] : [])]);
+    line([{ text: 'Or ' }, { link: 'tier', text: `we build it for USD ${P.custom.usd} once` }]);
     return p;
   }
   function askCustom(noMatch) {
@@ -73,13 +85,7 @@ export function createProUI(api) {
   function drawStruct() {
     const box = u.struct;
     box.textContent = '';
-    if (!P.licensed && !P.structTrial) {
-      const t = P.info && P.info.best ? `This file matches the ${P.info.best.name} template.` : P.info ? 'No built-in template matches this file; you can pick one or add your own.' : '';
-      box.append(lockedCard('templates', 'Structure view', [t, 'See the fields of the file as a tree: names, offsets, values and enums. Click a field to select its bytes. 20 templates ship (PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and more), and you can write your own. Export a struct as JSON or C.']));
-      if (P.custom) box.append(customLine());
-      askCustom(!!(P.info && !P.info.best));
-      return;
-    }
+    const full = (P.licensed || !P.treeFree) && !!P.tree; // export buttons only with a full tree to export
     const head = $('div', { class: 'phead' },
       $('span', { class: 'tname', text: P.busy ? `Reading with ${P.treeName || 'a template'}...` : (P.treeName || 'No template') }),
       $('span', { class: 'grow' }),
@@ -87,33 +93,36 @@ export function createProUI(api) {
       $('button', { title: 'Read the file again', 'aria-label': 'Refresh', text: '⟳', onclick: () => { P.userAct = true; parse(); } }));
     const exp = $('div', { class: 'phead' },
       $('span', { class: 'meta', text: P.treeMeta }), $('span', { class: 'grow' }),
-      $('button', { title: 'Open the selected struct (or the whole file) as JSON', text: 'JSON', disabled: !P.tree, onclick: () => post({ type: 'structExport', format: 'json', path: P.selPath || [] }) }),
-      $('button', { title: 'Open the selected struct (or the whole file) as a C struct with its values', text: 'C struct', disabled: !P.tree, onclick: () => post({ type: 'structExport', format: 'c', path: P.selPath || [] }) }));
+      full ? $('button', { title: 'Open the selected struct (or the whole file) as JSON', text: 'JSON', disabled: !P.tree, onclick: () => post({ type: 'structExport', format: 'json', path: P.selPath || [] }) }) : null,
+      full ? $('button', { title: 'Open the selected struct (or the whole file) as a C struct with its values', text: 'C struct', disabled: !P.tree, onclick: () => post({ type: 'structExport', format: 'c', path: P.selPath || [] }) }) : null);
     box.append(head, exp);
     if (P.treeError) box.append($('div', { class: 'perr', role: 'status', text: P.treeError }));
     if (P.none) box.append($('p', { class: 'hintp', text: 'No template matches this file. Pick one with Template..., or add your own JSON templates (setting hexViewer.templateFolders or the .vscode/hex-templates folder).' }));
     if (P.custom) box.append(customLine());
-    askCustom(!!P.none);
+    askCustom(!!P.none || !!(P.info && !P.info.best));
     if (!P.tree) return;
     const list = $('div', { class: 'tree', role: 'tree', 'aria-label': 'File structure' });
     const LIMIT = 500;
     const add = (n, pathArr, depth) => {
       const key = pathArr.join('.');
       const kids = n.c || [];
+      const nested = !kids.length && n.p > 0; // free view: the fields under this one are Zovo Pro
+      const opens = kids.length > 0 || nested;
       const isOpen = P.open.has(key);
-      const row = $('div', { class: 'tn' + (sameSel(pathArr) ? ' on' : '') + (n.e ? ' bad' : ''), role: 'treeitem', 'aria-level': String(depth + 1), 'aria-expanded': kids.length ? String(isOpen) : null, tabindex: '-1', title: `${n.t} at 0x${hexOffset(n.o, 1)}, ${fmtInt(n.s)} byte${n.s === 1 ? '' : 's'}${n.m ? '\n' + n.m : ''}${n.e ? '\n' + n.e : ''}` });
+      const row = $('div', { class: 'tn' + (sameSel(pathArr) ? ' on' : '') + (n.e ? ' bad' : ''), role: 'treeitem', 'aria-level': String(depth + 1), 'aria-expanded': opens ? String(isOpen) : null, tabindex: '-1', title: `${n.t} at 0x${hexOffset(n.o, 1)}, ${fmtInt(n.s)} byte${n.s === 1 ? '' : 's'}${n.m ? '\n' + n.m : ''}${n.e ? '\n' + n.e : ''}` });
       row.style.paddingLeft = `${depth * 12 + 4}px`; // CSSOM, allowed by the webview CSP (a style attribute is not)
-      row.append($('span', { class: 'tw', text: kids.length ? (isOpen ? '▾' : '▸') : ' ' }), $('span', { class: 'nm', text: n.n }));
+      row.append($('span', { class: 'tw', text: opens ? (isOpen ? '▾' : '▸') : ' ' }), $('span', { class: 'nm', text: n.n }));
       if (n.l) row.append($('span', { class: 'lb', text: n.l }));
       if (n.v !== undefined) row.append($('span', { class: 'vl' + (n.x ? ' cx' : ''), text: n.v }));
-      else if (kids.length && !n.l) row.append($('span', { class: 'ty', text: n.t }));
+      else if (opens && !n.l) row.append($('span', { class: 'ty', text: n.t }));
       if (n.e) row.append($('span', { class: 'er', text: '⚠ ' + n.e }));
       row.addEventListener('click', e => {
-        if (e.target.classList.contains('tw') && kids.length) { toggle(key); return; }
+        if (e.target.classList.contains('tw') && opens) { toggle(key); return; }
         P.selPath = pathArr; if (!n.x) selectRange(n.o, n.o + Math.max(1, n.s)); drawStruct();
       });
-      row.addEventListener('dblclick', () => { if (kids.length) toggle(key); });
+      row.addEventListener('dblclick', () => { if (opens) toggle(key); });
       list.append(row);
+      if (nested && isOpen) list.append(nestedRow(n, depth + 1));
       if (kids.length && isOpen) {
         const shown = Math.min(kids.length, P.more && P.more[key] ? P.more[key] : LIMIT);
         for (let i = 0; i < shown; i++) add(kids[i], [...pathArr, i], depth + 1);
@@ -124,6 +133,20 @@ export function createProUI(api) {
     box.append(list);
   }
   const indent = (e, px) => { e.style.marginLeft = px + 'px'; return e; };
+  // One row in place of the nested fields of n. A click (or Enter) asks the host: with a free try left it opens every
+  // level of this tab and uses 1 try; with none left the host shows the Zovo Pro panel. Nothing happens on its own.
+  function nestedRow(n, depth) {
+    const left = P.trials ? P.trials.templates || 0 : 0;
+    const go = () => { P.userAct = true; post({ type: 'proTry', feature: 'templates' }); };
+    const row = $('div', { class: 'tn nestpro', role: 'treeitem', 'aria-level': String(depth + 1), tabindex: '0',
+      title: left > 0 ? `Click to see them. Uses 1 of your ${left} free tr${left === 1 ? 'y' : 'ies'} left on this computer.` : 'Zovo Pro shows every nested field. Click for how to get it.' },
+      $('span', { class: 'tw', text: ' ' }), $('span', { class: 'nm', text: `${fmtInt(n.p)} nested field${n.p === 1 ? '' : 's'}: Zovo Pro` }),
+      $('span', { class: 'ty', text: left > 0 ? `${left} free tr${left === 1 ? 'y' : 'ies'} left` : '' }));
+    row.style.paddingLeft = `${depth * 12 + 4}px`;
+    row.addEventListener('click', go);
+    row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    return row;
+  }
   const sameSel = p => P.selPath && P.selPath.length === p.length && P.selPath.every((v, i) => v === p[i]);
   function toggle(key) { if (P.open.has(key)) P.open.delete(key); else P.open.add(key); drawStruct(); }
   function selNode() {
@@ -197,7 +220,8 @@ export function createProUI(api) {
       case 'pro':
         P.licensed = !!m.licensed; P.onSale = !!m.onSale; if (m.trials) P.trials = m.trials;
         document.body.classList.toggle('licensed', P.licensed);
-        if (P.panel === 'struct') { if ((P.licensed || P.structTrial) && !P.tree && !P.busy) parse(); drawStruct(); }
+        if (P.panel === 'struct') { if (!P.busy && (!P.tree ? !P.none : P.licensed && P.treeFree)) parse(); drawStruct(); }
+        else if (P.licensed && P.treeFree) P.tree = null;
         if (P.panel === 'bm') { post({ type: 'bmList' }); drawBookmarks(); }
         post({ type: 'bmList' });
         render();
@@ -210,15 +234,16 @@ export function createProUI(api) {
         u.tabs.querySelector('[data-panel="struct"]').title = m.best ? `Structure: ${m.best.name}` : 'Structure';
         drawStruct();
         return true;
-      case 'customGrant': P.custom = { usd: m.usd }; drawStruct(); return true;
+      case 'customGrant': P.custom = { usd: m.usd, order: m.order && m.order.usd ? { usd: m.order.usd, paypal: !!m.order.paypal } : null }; drawStruct(); return true;
       case 'structBusy': P.busy = true; P.treeName = m.name; drawStruct(); return true;
       case 'struct':
         P.busy = false;
         if (m.locked) { P.licensed = false; P.structTrial = false; if (m.trial !== undefined) P.trials = { ...(P.trials || {}), templates: m.trial }; drawStruct(); return true; }
+        if (m.trial !== undefined) P.trials = { ...(P.trials || {}), templates: m.trial };
         P.none = !!m.none;
         if (m.none) { P.tree = null; P.treeName = ''; drawStruct(); return true; }
         if (P.treeId !== m.id) { P.selPath = null; P.open = new Set(['']); P.more = null; }
-        P.tree = m.tree; P.treeId = m.id; P.treeName = m.name + (m.user ? ' (your template)' : '');
+        P.tree = m.tree; P.treeId = m.id; P.treeName = m.name + (m.user ? ' (your template)' : ''); P.treeFree = !!m.free;
         P.treeError = m.error ? `The template stopped: ${m.error}` : null;
         P.treeMeta = `${fmtInt(m.nodes)} fields, ${m.ms} ms`;
         // open the first level, so the main structs show at once
@@ -249,7 +274,7 @@ export function createProUI(api) {
 
   /** After an edit or a change on disk: read the structure again (once the typing stops). */
   function afterChange() {
-    if ((!P.licensed && !P.structTrial) || !P.tree) return;
+    if (!P.tree) return;
     clearTimeout(P.structTimer);
     P.structTimer = setTimeout(() => { if (P.panel === 'struct') parse(); else P.tree = null; }, 700);
   }
@@ -263,7 +288,7 @@ export function createProUI(api) {
   const probe = () => ({
     panel: P.panel, licensed: P.licensed, template: P.treeName, structError: P.treeError, busy: P.busy,
     treeTop: P.tree && P.tree.c ? P.tree.c.map(c => c.n) : null, selPath: P.selPath, bookmarks: P.bookmarks.map(b => [b.start, b.end, b.label]),
-    locked: !!document.querySelector('.pane:not([hidden]) .locked'), custom: (document.querySelector('.customfmt') || {}).textContent || null, detected: P.info && P.info.best ? P.info.best.id : null, trials: P.trials || null, structTrial: !!P.structTrial,
+    locked: !!document.querySelector('.pane:not([hidden]) .locked'), treeFree: !!P.treeFree, nestedRows: [...document.querySelectorAll('.nestpro .nm')].map(e => e.textContent), custom: (document.querySelector('.customfmt') || {}).textContent || null, detected: P.info && P.info.best ? P.info.best.id : null, trials: P.trials || null, structTrial: !!P.structTrial,
   });
 
   return { tabs: u.tabs, panes: [u.struct, u.bm], onMessage, onKey, rowMarks, afterChange, start, probe, show, state: P };

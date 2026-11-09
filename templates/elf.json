@@ -7,7 +7,12 @@
       { "name": "e_ident", "type": "Ident" },
       { "name": "header", "type": "Header" },
       { "name": "program_headers", "type": { "switch": "e_ident.class", "cases": { "1": "Phdr32" }, "default": "Phdr64" }, "count": "min(header.e_phnum, 4096)", "at": "header.e_phoff", "peek": true, "if": "header.e_phnum > 0 && header.e_phoff < size()" },
-      { "name": "section_headers", "type": { "switch": "e_ident.class", "cases": { "1": "Shdr32" }, "default": "Shdr64" }, "count": "min(header.e_shnum, 65535)", "at": "header.e_shoff", "peek": true, "if": "header.e_shnum > 0 && header.e_shoff < size()" }
+      { "name": "section_headers", "type": { "switch": "e_ident.class", "cases": { "1": "Shdr32" }, "default": "Shdr64" }, "count": "min(header.e_shnum, 65535)", "at": "header.e_shoff", "peek": true, "if": "header.e_shnum > 0 && header.e_shoff < size()" },
+      { "name": "file_type", "value": "header.e_type", "enum": "EType" },
+      { "name": "machine", "value": "header.e_machine", "enum": "Machine" },
+      { "name": "entry_point", "value": "header.e_entry", "format": "hex" },
+      { "name": "program_header_count", "value": "header.e_phnum", "format": "dec" },
+      { "name": "section_count", "value": "header.e_shnum", "format": "dec" }
     ],
     "Ident": [
       { "name": "magic", "type": "bytes", "length": 4, "expect": "7F 45 4C 46" },
@@ -19,7 +24,7 @@
       { "name": "padding", "type": "bytes", "length": 7 }
     ],
     "Header": { "endian": "e_ident.data == 2 ? 'big' : 'little'", "fields": [
-      { "name": "e_type", "type": "u16", "enum": { "0": "None", "1": "Relocatable", "2": "Executable", "3": "Shared object / PIE", "4": "Core dump" } },
+      { "name": "e_type", "type": "u16", "enum": "EType" },
       { "name": "e_machine", "type": "u16", "enum": "Machine" },
       { "name": "e_version", "type": "u32" },
       { "name": "e_entry", "type": { "switch": "e_ident.class", "cases": { "1": "u32" }, "default": "u64" }, "format": "hex" },
@@ -28,7 +33,7 @@
       { "name": "e_flags", "type": "u32", "format": "hex" },
       { "name": "e_ehsize", "type": "u16" }, { "name": "e_phentsize", "type": "u16" }, { "name": "e_phnum", "type": "u16" },
       { "name": "e_shentsize", "type": "u16" }, { "name": "e_shnum", "type": "u16" }, { "name": "e_shstrndx", "type": "u16" },
-      { "name": "shstrtab_offset", "hidden": true, "value": "e_shstrndx < e_shnum && e_shoff + (e_shstrndx + 1) * e_shentsize <= size() ? u32(e_shoff + e_shstrndx * e_shentsize + (e_ident.class == 1 ? 16 : 24)) : 0" }
+      { "name": "shstrtab_offset", "hidden": true, "value": "e_shstrndx < e_shnum && e_shoff + (e_shstrndx + 1) * e_shentsize <= size() ? u32(e_shoff + e_shstrndx * e_shentsize + (e_ident.class == 1 ? 16 : e_ident.data == 2 ? 28 : 24)) : 0" }
     ] },
     "Phdr32": { "endian": "e_ident.data == 2 ? 'big' : 'little'", "label": "p_type", "fields": [
       { "name": "p_type", "type": "u32", "enum": "PType" }, { "name": "p_offset", "type": "u32", "format": "hex" },
@@ -46,20 +51,59 @@
       { "name": "name", "type": "zstring", "length": 256, "encoding": "latin1", "at": "header.shstrtab_offset + sh_name", "peek": true, "if": "header.shstrtab_offset && header.shstrtab_offset + sh_name < size()" },
       { "name": "sh_type", "type": "u32", "enum": "ShType" }, { "name": "sh_flags", "type": "u32", "flags": "ShFlags" },
       { "name": "sh_addr", "type": "u32", "format": "hex" }, { "name": "sh_offset", "type": "u32", "format": "hex" }, { "name": "sh_size", "type": "u32" },
-      { "name": "sh_link", "type": "u32" }, { "name": "sh_info", "type": "u32" }, { "name": "sh_addralign", "type": "u32" }, { "name": "sh_entsize", "type": "u32" }
+      { "name": "sh_link", "type": "u32" }, { "name": "sh_info", "type": "u32" }, { "name": "sh_addralign", "type": "u32" }, { "name": "sh_entsize", "type": "u32" },
+      { "name": "link_offset", "hidden": true, "value": "sh_link > 0 && sh_link < header.e_shnum && header.e_shoff + (sh_link + 1) * header.e_shentsize <= size() ? u32(header.e_shoff + sh_link * header.e_shentsize + 16) : 0" },
+      { "name": "symbol_count", "value": "sh_size // sh_entsize", "format": "dec", "comment": "The table below shows the first 1,000 symbols.", "if": "(sh_type == 2 || sh_type == 11) && sh_entsize >= 16" },
+      { "name": "symbols", "type": "Sym32", "count": "min(sh_size // sh_entsize, 1000)", "at": "sh_offset", "peek": true, "if": "(sh_type == 2 || sh_type == 11) && sh_entsize >= 16 && sh_offset + sh_size <= size()" },
+      { "name": "dynamic", "type": "Dyn32", "count": "min(sh_size // 8, 512)", "until": "_.d_tag == 0", "at": "sh_offset", "peek": true, "if": "sh_type == 6 && sh_size >= 8 && sh_offset + sh_size <= size()" }
     ] },
     "Shdr64": { "endian": "e_ident.data == 2 ? 'big' : 'little'", "label": "defined(name) ? name : ''", "fields": [
       { "name": "sh_name", "type": "u32" },
       { "name": "name", "type": "zstring", "length": 256, "encoding": "latin1", "at": "header.shstrtab_offset + sh_name", "peek": true, "if": "header.shstrtab_offset && header.shstrtab_offset + sh_name < size()" },
       { "name": "sh_type", "type": "u32", "enum": "ShType" }, { "name": "sh_flags", "type": "u64", "flags": "ShFlags" },
       { "name": "sh_addr", "type": "u64", "format": "hex" }, { "name": "sh_offset", "type": "u64", "format": "hex" }, { "name": "sh_size", "type": "u64" },
-      { "name": "sh_link", "type": "u32" }, { "name": "sh_info", "type": "u32" }, { "name": "sh_addralign", "type": "u64" }, { "name": "sh_entsize", "type": "u64" }
+      { "name": "sh_link", "type": "u32" }, { "name": "sh_info", "type": "u32" }, { "name": "sh_addralign", "type": "u64" }, { "name": "sh_entsize", "type": "u64" },
+      { "name": "link_offset", "hidden": true, "value": "sh_link > 0 && sh_link < header.e_shnum && header.e_shoff + (sh_link + 1) * header.e_shentsize <= size() ? u32(header.e_shoff + sh_link * header.e_shentsize + (e_ident.data == 2 ? 28 : 24)) : 0" },
+      { "name": "symbol_count", "value": "sh_size // sh_entsize", "format": "dec", "comment": "The table below shows the first 1,000 symbols.", "if": "(sh_type == 2 || sh_type == 11) && sh_entsize >= 24" },
+      { "name": "symbols", "type": "Sym64", "count": "min(sh_size // sh_entsize, 1000)", "at": "sh_offset", "peek": true, "if": "(sh_type == 2 || sh_type == 11) && sh_entsize >= 24 && sh_offset + sh_size <= size()" },
+      { "name": "dynamic", "type": "Dyn64", "count": "min(sh_size // 16, 512)", "until": "_.d_tag == 0", "at": "sh_offset", "peek": true, "if": "sh_type == 6 && sh_size >= 16 && sh_offset + sh_size <= size()" }
+    ] },
+    "Sym32": { "label": "st_name > 0 && link_offset > 0 && link_offset + st_name < size() ? name : ''", "fields": [
+      { "name": "st_name", "type": "u32" },
+      { "name": "name", "type": "zstring", "length": 256, "encoding": "latin1", "at": "link_offset + st_name", "peek": true, "if": "st_name > 0 && link_offset > 0 && link_offset + st_name < size()" },
+      { "name": "st_value", "type": "u32", "format": "hex" }, { "name": "st_size", "type": "u32" },
+      { "name": "st_info", "type": "u8", "format": "hex" },
+      { "name": "bind", "value": "st_info >> 4", "enum": "SymBind" }, { "name": "kind", "value": "st_info & 15", "enum": "SymType" },
+      { "name": "st_other", "type": "u8" }, { "name": "visibility", "value": "st_other & 3", "enum": "SymVis" },
+      { "name": "st_shndx", "type": "u16", "comment": "Section index; 0 is undefined, 0xFFF1 absolute" }
+    ] },
+    "Sym64": { "label": "st_name > 0 && link_offset > 0 && link_offset + st_name < size() ? name : ''", "fields": [
+      { "name": "st_name", "type": "u32" },
+      { "name": "name", "type": "zstring", "length": 256, "encoding": "latin1", "at": "link_offset + st_name", "peek": true, "if": "st_name > 0 && link_offset > 0 && link_offset + st_name < size()" },
+      { "name": "st_info", "type": "u8", "format": "hex" },
+      { "name": "bind", "value": "st_info >> 4", "enum": "SymBind" }, { "name": "kind", "value": "st_info & 15", "enum": "SymType" },
+      { "name": "st_other", "type": "u8" }, { "name": "visibility", "value": "st_other & 3", "enum": "SymVis" },
+      { "name": "st_shndx", "type": "u16", "comment": "Section index; 0 is undefined, 0xFFF1 absolute" },
+      { "name": "st_value", "type": "u64", "format": "hex" }, { "name": "st_size", "type": "u64" }
+    ] },
+    "Dyn32": { "label": "d_tag", "fields": [
+      { "name": "d_tag", "type": "i32", "enum": "DynTag" }, { "name": "d_val", "type": "u32", "format": "hex" },
+      { "name": "text", "type": "zstring", "length": 1024, "encoding": "latin1", "at": "link_offset + d_val", "peek": true, "if": "(d_tag == 1 || d_tag == 14 || d_tag == 15 || d_tag == 29) && link_offset > 0 && link_offset + d_val < size()" }
+    ] },
+    "Dyn64": { "label": "d_tag", "fields": [
+      { "name": "d_tag", "type": "i64", "enum": "DynTag" }, { "name": "d_val", "type": "u64", "format": "hex" },
+      { "name": "text", "type": "zstring", "length": 1024, "encoding": "latin1", "at": "link_offset + d_val", "peek": true, "if": "(d_tag == 1 || d_tag == 14 || d_tag == 15 || d_tag == 29) && link_offset > 0 && link_offset + d_val < size()" }
     ] }
   },
   "enums": {
+    "EType": { "0": "None", "1": "Relocatable", "2": "Executable", "3": "Shared object / PIE", "4": "Core dump" },
     "Machine": { "0": "None", "3": "x86", "8": "MIPS", "20": "PowerPC", "21": "PowerPC 64", "40": "ARM", "42": "SuperH", "50": "IA-64", "62": "x86-64", "183": "AArch64", "243": "RISC-V", "247": "BPF", "258": "LoongArch" },
     "PType": { "0": "NULL", "1": "LOAD", "2": "DYNAMIC", "3": "INTERP", "4": "NOTE", "5": "SHLIB", "6": "PHDR", "7": "TLS", "0x6474E550": "GNU_EH_FRAME", "0x6474E551": "GNU_STACK", "0x6474E552": "GNU_RELRO", "0x6474E553": "GNU_PROPERTY" },
-    "ShType": { "0": "NULL", "1": "PROGBITS", "2": "SYMTAB", "3": "STRTAB", "4": "RELA", "5": "HASH", "6": "DYNAMIC", "7": "NOTE", "8": "NOBITS", "9": "REL", "11": "DYNSYM", "14": "INIT_ARRAY", "15": "FINI_ARRAY", "0x6FFFFFF6": "GNU_HASH", "0x6FFFFFFE": "VERNEED", "0x6FFFFFFF": "VERSYM" }
+    "ShType": { "0": "NULL", "1": "PROGBITS", "2": "SYMTAB", "3": "STRTAB", "4": "RELA", "5": "HASH", "6": "DYNAMIC", "7": "NOTE", "8": "NOBITS", "9": "REL", "11": "DYNSYM", "14": "INIT_ARRAY", "15": "FINI_ARRAY", "0x6FFFFFF6": "GNU_HASH", "0x6FFFFFFE": "VERNEED", "0x6FFFFFFF": "VERSYM" },
+    "SymBind": { "0": "LOCAL", "1": "GLOBAL", "2": "WEAK", "10": "GNU_UNIQUE" },
+    "SymType": { "0": "NOTYPE", "1": "OBJECT", "2": "FUNC", "3": "SECTION", "4": "FILE", "5": "COMMON", "6": "TLS", "10": "GNU_IFUNC" },
+    "SymVis": { "0": "DEFAULT", "1": "INTERNAL", "2": "HIDDEN", "3": "PROTECTED" },
+    "DynTag": { "0": "NULL", "1": "NEEDED", "2": "PLTRELSZ", "3": "PLTGOT", "4": "HASH", "5": "STRTAB", "6": "SYMTAB", "7": "RELA", "8": "RELASZ", "9": "RELAENT", "10": "STRSZ", "11": "SYMENT", "12": "INIT", "13": "FINI", "14": "SONAME", "15": "RPATH", "16": "SYMBOLIC", "17": "REL", "18": "RELSZ", "19": "RELENT", "20": "PLTREL", "21": "DEBUG", "22": "TEXTREL", "23": "JMPREL", "24": "BIND_NOW", "25": "INIT_ARRAY", "26": "FINI_ARRAY", "27": "INIT_ARRAYSZ", "28": "FINI_ARRAYSZ", "29": "RUNPATH", "30": "FLAGS", "32": "PREINIT_ARRAY", "33": "PREINIT_ARRAYSZ", "0x6FFFFEF5": "GNU_HASH", "0x6FFFFFF0": "VERSYM", "0x6FFFFFFB": "FLAGS_1", "0x6FFFFFFE": "VERNEED", "0x6FFFFFFF": "VERNEEDNUM", "0x6FFFFFF9": "RELACOUNT", "0x6FFFFFFA": "RELCOUNT" }
   },
   "flags": { "PFlags": { "0x1": "X", "0x2": "W", "0x4": "R" }, "ShFlags": { "0x1": "WRITE", "0x2": "ALLOC", "0x4": "EXECINSTR", "0x10": "MERGE", "0x20": "STRINGS", "0x40": "INFO_LINK", "0x400": "TLS" } }
 }

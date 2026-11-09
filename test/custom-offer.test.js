@@ -81,8 +81,9 @@ test('host: a file with a template gets no line (and no link opens); a later no-
 test('host: the picker shows the line when no template matches, once; "None of these matches" when some match', () => {
   let d = host('picker-nomatch');
   const first = d.picks[0];
-  assert.deepEqual(first.slice(-3).map(i => i.label), ['No template for this format', '$(comment-discussion) Request one (free)', '$(heart) Or we build it for USD 299 once']);
-  assert.equal(first.at(-3).kind, -1, 'a separator, not a choice');
+  // EXEC13: the USD 49 template order sits between the free request and USD 299, Sponsors first, PayPal second
+  assert.deepEqual(first.slice(-5).map(i => i.label), ['No template for this format', '$(comment-discussion) Request one (free)', '$(package) Template for your format in 2 working days: USD 49, Zovo Pro included', '$(credit-card) The same template order by PayPal, USD 49', '$(heart) Or we build it for USD 299 once']);
+  assert.equal(first.at(-5).kind, -1, 'a separator, not a choice');
   assert.equal(d.external.length, 1);
   assert.match(d.external[0], /format=\.xyz/);
   assert.ok(!d.picks[1].some(i => /USD 299|None of these/.test(i.label)), 'the second picker in the session is the old one');
@@ -149,7 +150,7 @@ test('webview: restored on open with no template: no claim, no line; a click on 
   ui.show('struct', true);
   assert.equal(claims(posted), 1, 'asked once per tab');
   assert.equal(struct.querySelector('.customfmt'), null, 'nothing before the host says yes');
-  ui.onMessage({ type: 'customGrant', usd: 299 });
+  ui.onMessage({ type: 'customGrant', usd: 299 }); // a host without the template order (a funding value empty)
   const line = struct.querySelector('.customfmt');
   assert.equal(line.textContent, 'No template for this format. Request one (free), or we build it for USD 299 once.');
   const links = line.all(e => e.tag === 'button');
@@ -174,4 +175,69 @@ test('webview: a file with a template never claims; Pro "no template matches" cl
   assert.equal(claims(t.posted), 1);
   t.ui.onMessage({ type: 'customGrant', usd: 299 });
   assert.match(t.struct.textContent, /No template matches this file\. Pick one with Template\.\.\..*No template for this format\. Request one \(free\), or we build it for USD 299 once\./);
+});
+
+// ---------- EXEC13: the USD 49 template order ----------
+
+const ORDER_TIER = 'https://github.com/sponsors/theluckystrike/sponsorships?tier_id=680220';
+
+test('template order: values from funding.json, hidden while one is empty, links only after the line was shown', () => {
+  const shared = path.join(os.homedir(), 'plugin-market-intel-work', 'factory', 'sprint', 'funding.json');
+  if (fs.existsSync(shared)) {
+    const f = JSON.parse(fs.readFileSync(shared, 'utf8'));
+    for (const k of ['template_order_tier', 'template_order_usd', 'paypal_me']) assert.equal(CO.FUNDING_CUSTOM[k], f[k], k);
+  }
+  assert.deepEqual(CO.templateOrder(), { tier: ORDER_TIER, usd: 49, paypal: 'https://www.paypal.com/paypalme/najzzz/49USD' });
+  for (const k of ['template_order_tier', 'template_order_usd']) {
+    assert.equal(CO.templateOrder({ ...CO.FUNDING_CUSTOM, [k]: k === 'template_order_usd' ? 0 : '' }), null, k);
+    assert.equal(CO.templateOrder({ ...CO.FUNDING_CUSTOM, [k]: undefined }), null, k);
+  }
+  assert.equal(CO.templateOrder({ ...CO.FUNDING_CUSTOM, template_order_tier: 'https://evil.example/x' }), null);
+  assert.equal(CO.templateOrder({ ...CO.FUNDING_CUSTOM, custom_format_tier: '' }), null, 'no USD 299 line, no middle line');
+  assert.deepEqual(CO.templateOrder({ ...CO.FUNDING_CUSTOM, paypal_me: '' }), { tier: ORDER_TIER, usd: 49, paypal: '' }, 'no PayPal link: Sponsors only');
+  assert.equal(CO.lineText('template', 299, CO.templateOrder()), 'No template for this format. Request one (free). Template for your format in 2 working days: USD 49, Zovo Pro included (GitHub Sponsors, or PayPal). Or we build it for USD 299 once.');
+  assert.equal(CO.lineText('element', 299, CO.templateOrder()), 'Request support for this (free), or we build it for USD 299 once.', 'the DOCX kind never gets the template order');
+  const opened = [];
+  const vscode = { version: '1.142.0', env: { appName: 'Visual Studio Code', openExternal: async u => { opened.push(String(u)); return true; } }, Uri: { parse: s => s } };
+  const s = CO.createCustomOffer({ vscode, product: 'Hex Viewer', version: '0.3.4', withOrder: true });
+  assert.equal(s.url('order'), ''); assert.equal(s.url('orderPaypal'), '');
+  assert.deepEqual(s.claim(), { usd: 299, order: { usd: 49, paypal: true } });
+  assert.equal(s.url('order'), ORDER_TIER);
+  assert.equal(s.url('orderPaypal'), 'https://www.paypal.com/paypalme/najzzz/49USD');
+  const off = CO.createCustomOffer({ vscode, product: 'Hex Viewer', funding: { ...CO.FUNDING_CUSTOM, template_order_usd: '' }, withOrder: true });
+  assert.deepEqual(off.claim(), { usd: 299 }, 'empty value: the line has no middle option');
+  assert.equal(off.url('order'), '');
+});
+
+test('host: the panel grant carries the USD 49 order; its links open the tier and PayPal on click only', () => {
+  const d = host('panel');
+  const g = d.sent.find(m => m.type === 'customGrant');
+  assert.deepEqual(g.order, { usd: 49, paypal: true });
+  for (const k of ['template_order_tier', 'template_order_usd']) {
+    const e = host('panel', k);
+    const ge = e.sent.find(m => m.type === 'customGrant');
+    assert.equal(ge.usd, 299, k);
+    assert.equal(ge.order, null, k);
+    const p = host('picker-nomatch', k);
+    assert.ok(!p.picks[0].some(i => /USD 49|template order/.test(i.label)), k);
+    assert.ok(p.picks[0].some(i => /USD 299/.test(i.label)), k);
+  }
+  const o = host('picker-order');
+  assert.deepEqual(o.external, [ORDER_TIER, 'https://www.paypal.com/paypalme/najzzz/49USD']);
+  assert.deepEqual([o.modal, o.errors], [[], []]);
+});
+
+test('webview: the USD 49 line sits between the free request and USD 299, three links plus PayPal', async () => {
+  const { ui, posted, struct } = await panelUI();
+  ui.start();
+  ui.onMessage({ type: 'structInfo', licensed: false, best: null, matches: [], count: 26, trials: { templates: 3 } });
+  ui.show('struct', true);
+  ui.onMessage({ type: 'customGrant', usd: 299, order: { usd: 49, paypal: true } });
+  const line = struct.querySelector('.customfmt');
+  assert.equal(line.textContent, 'No template for this format.Request one (free)Template for your format in 2 working days: USD 49, Zovo Pro included (GitHub Sponsors, or PayPal)Or we build it for USD 299 once');
+  const links = line.all(e => e.tag === 'button');
+  assert.deepEqual(links.map(b => b.textContent), ['Request one (free)', 'Template for your format in 2 working days: USD 49, Zovo Pro included', 'PayPal', 'we build it for USD 299 once']);
+  assert.ok(!posted.some(m => m.type === 'customOpen'), 'no link opens by itself');
+  links.forEach(b => b.onclick());
+  assert.deepEqual(posted.filter(m => m.type === 'customOpen').map(m => m.which), ['request', 'order', 'orderPaypal', 'tier']);
 });

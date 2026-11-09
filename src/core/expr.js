@@ -7,9 +7,12 @@
 //   + - * / % (integer division with //), << >> >>> & | ^ ~, == != < <= > >=, && || !, ?: and (...)
 //   functions: min max abs align(x, n) pos() size() start() end() str(x) hex(x) len(x) defined(x)
 //              u8(off) u16(off) u32(off) (current byte order), u16le u16be u32le u32be: peek at file bytes
+//              addr(table, a, 'vfield', 'sizefield', 'filefield'): map an address through a list of structs
+//              (PE sections, ELF program headers): a - e.vfield + e.filefield for the first element e with
+//              e.vfield <= a < e.vfield + e.sizefield, or -1 when no element covers a
 // Every evaluation has a step budget, so a hostile template cannot hang the extension host.
 
-const FUNCS = new Set(['min', 'max', 'abs', 'align', 'pos', 'size', 'start', 'end', 'str', 'hex', 'len', 'defined', 'oct',
+const FUNCS = new Set(['min', 'max', 'abs', 'align', 'pos', 'size', 'start', 'end', 'str', 'hex', 'len', 'defined', 'oct', 'addr',
   'u8', 'u16', 'u32', 'u16le', 'u16be', 'u32le', 'u32be']);
 const PEEKS = new Set(['u8', 'u16', 'u32', 'u16le', 'u16be', 'u32le', 'u32be']);
 const MAX_LEN = 2000;
@@ -189,6 +192,22 @@ function evaluate(src, scope) {
           case 'hex': return '0x' + Math.trunc(num(a[0])).toString(16).toUpperCase();
           case 'len': return a[0] && typeof a[0] === 'object' && Array.isArray(a[0].children) ? a[0].children.length : String(a[0] == null ? '' : a[0]).length;
           case 'defined': return a[0] !== undefined && a[0] !== null;
+          case 'addr': {
+            const [tab, at, vf, sf, ff] = a;
+            if (!tab || typeof tab !== 'object' || !tab.__node || tab.kind !== 'array') return -1;
+            if (typeof vf !== 'string' || typeof sf !== 'string' || typeof ff !== 'string') throw new ExprError('addr() needs three field names in quotes.');
+            const x = num(at);
+            if (typeof x !== 'number' || !Number.isFinite(x)) return -1;
+            for (const e of tab.children) {
+              steps += 3;
+              if (steps > MAX_STEPS) throw new ExprError('The expression took too many steps.');
+              if (!e || e.kind !== 'struct') continue;
+              const v = num(unwrap(scope.member(e, vf))), sz = num(unwrap(scope.member(e, sf))), f = num(unwrap(scope.member(e, ff)));
+              if (typeof v !== 'number' || typeof sz !== 'number' || typeof f !== 'number') continue;
+              if (x >= v && x < v + sz) return x - v + f;
+            }
+            return -1;
+          }
           case 'oct': { const t = String(a[0] == null ? '' : a[0]).replace(/[\0\s]+/g, ''); return /^[0-7]+$/.test(t) ? parseInt(t, 8) : 0; }
         }
       }

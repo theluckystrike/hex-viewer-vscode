@@ -1,0 +1,42 @@
+{
+  "id": "uf2", "name": "UF2 firmware file (USB flashing format)", "extensions": ["uf2"],
+  "match": [[{ "offset": 0, "hex": "55 46 32 0A 57 51 5D 9E" }, { "offset": 508, "hex": "30 6F B1 0A" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "flags", "type": "u32", "flags": "Flags", "at": 8, "peek": true, "comment": "Flags of the first block" },
+      { "name": "target_address", "type": "u32", "format": "hex", "at": 12, "peek": true, "comment": "Flash address of the first block" },
+      { "name": "payload_size", "type": "u32", "at": 16, "peek": true, "comment": "Data bytes in the first block (256 for most boards)" },
+      { "name": "num_blocks", "type": "u32", "at": 24, "peek": true, "comment": "Blocks in this file, from the first block" },
+      { "name": "family_id", "type": "u32", "enum": "Family", "at": 28, "peek": true, "if": "(u32le(8) & 0x2000) != 0", "comment": "The board family the firmware is for" },
+      { "name": "file_size", "type": "u32", "at": 28, "peek": true, "if": "(u32le(8) & 0x2000) == 0", "comment": "Without the family ID flag this word is the file size, or 0" },
+      { "name": "blocks_in_file", "value": "size() // 512", "format": "dec" },
+      { "name": "blocks", "type": "Block", "count": "min(size() // 512, 2048)", "comment": "The first 2,048 blocks are shown." }
+    ],
+    "Block": { "size": 512, "label": "hex(target_address)", "fields": [
+      { "name": "magic_start0", "type": "u32", "format": "hex", "expect": 171066965 },
+      { "name": "magic_start1", "type": "u32", "format": "hex", "expect": 2656915799 },
+      { "name": "flags", "type": "u32", "flags": "Flags" },
+      { "name": "target_address", "type": "u32", "format": "hex" },
+      { "name": "payload_size", "type": "u32" },
+      { "name": "block_no", "type": "u32" },
+      { "name": "num_blocks", "type": "u32" },
+      { "name": "family_id", "type": "u32", "enum": "Family", "if": "(flags & 0x2000) != 0" },
+      { "name": "file_size", "type": "u32", "if": "(flags & 0x2000) == 0" },
+      { "name": "data", "type": "bytes", "length": "min(payload_size, 476)" },
+      { "seek": "start() + 508" },
+      { "name": "magic_end", "type": "u32", "format": "hex", "expect": 179400496 }
+    ] }
+  },
+  "enums": {
+    "Family": {
+      "0x68ED2B88": "Microchip SAMD21", "0x55114460": "Microchip SAMD51", "0xE48BFF56": "Raspberry Pi RP2040",
+      "0xE48BFF59": "Raspberry Pi RP2350 (Arm, secure)", "0xE48BFF5A": "Raspberry Pi RP2350 (RISC-V)", "0xE48BFF5B": "Raspberry Pi RP2350 (Arm, non-secure)",
+      "0xADA52840": "Nordic nRF52840", "0x1B57745F": "Nordic nRF52", "0x1C5F21B0": "Espressif ESP32", "0xBFDD4EEE": "Espressif ESP32-S2",
+      "0xD42BA06C": "Espressif ESP32-C3", "0xC47E5767": "Espressif ESP32-S3", "0x540DDF62": "Espressif ESP32-C6", "0x332726F6": "Espressif ESP32-H2",
+      "0x5EE21072": "ST STM32F1", "0x57755A57": "ST STM32F401", "0x6DB66082": "ST STM32F407", "0x53B80F00": "ST STM32F7", "0x00FF6919": "ST STM32L4",
+      "0x4FB2D5BD": "NXP i.MX RT10xx", "0x2ABC77EC": "NXP LPC55xx", "0x16573617": "Microchip ATmega32"
+    }
+  },
+  "flags": { "Flags": { "0x1": "NOT_MAIN_FLASH", "0x1000": "FILE_CONTAINER", "0x2000": "FAMILY_ID", "0x4000": "MD5_CHECKSUM", "0x8000": "EXTENSION_TAGS" } }
+}

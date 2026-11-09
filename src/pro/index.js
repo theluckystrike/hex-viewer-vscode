@@ -17,8 +17,9 @@ const TRIAL_KEY = 'hexViewer.proTrial';
 
 const FEATURES = {
   templates: {
-    title: 'Binary templates and the Structure view',
-    detail: 'Reads the file with a template and shows its fields as a tree: names, offsets, values and enums, with a click to select the bytes. 20 templates ship (PNG, JPEG, GIF, BMP, ICO, TIFF, WebP, WAV, FLAC, MP4, ZIP, GZIP, TAR, PDF, SQLite, ELF, PE, Mach-O, Java class, PCAP), and you can add your own as JSON files. Export any struct as JSON or as a C struct.',
+    // 0.3.4 (EXEC13): the top level of the Structure view is free; this is the nested part
+    title: 'Nested fields in the Structure view',
+    detail: 'The Structure view shows the top level of every template for free. Zovo Pro opens every nested field: ELF program and section headers, symbol and dynamic tables, PE sections, imports and resources, Mach-O load commands, DEX and WebAssembly tables, device tree nodes, and more. Click a field to select its bytes, and export any struct as JSON or as a C struct. 26 templates ship (firmware: UF2, device tree, U-Boot uImage, Android boot.img; code: ELF, PE, Mach-O, WebAssembly, DEX, Java class; files: PNG, ZIP, PDF, SQLite, PCAP and more), and you can add your own as JSON files.',
   },
   bookmarks: {
     title: 'Bookmarks and notes',
@@ -41,6 +42,10 @@ const FEATURES = {
 // The facade (src/license) adds the "How to buy" paragraph: the USD 19 tier on GitHub Sponsors, PayPal USD 19 or
 // USD 59 for a team of 5 (CONV2).
 const PRICE_LINE = 'Zovo Pro is USD 19 once, for life, and unlocks the Pro features in every Zovo viewer. Unlock with GitHub Sponsors asks GitHub one question and sends nothing else.';
+// EXEC13: one price comparison, shown only in this Pro panel (never on open, never in the README). Prices fetched from
+// sweetscape.com/store on 2026-11-10 (010 Editor New User: USD 59.95 Home/Academic, USD 149.95 Commercial). Set it to
+// '' when the page shows other prices.
+const ANCHOR_LINE = '010 Editor costs USD 59.95 (home) or 149.95 (commercial); Zovo Pro is USD 19 once.';
 
 function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex Viewer', keys = KEYS, license }) {
   const emitter = new vscode.EventEmitter();
@@ -66,7 +71,7 @@ function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex V
   async function explain(feature) {
     const f = FEATURES[feature] || { title: 'This feature', detail: '' };
     const tried = trialUsed(feature) >= TRIAL_USES ? `You have used the ${TRIAL_USES} free tries of this feature on this computer.\n\n` : '';
-    return lic.requirePro(f.title, `${tried}${f.detail}\n\n${PRICE_LINE}\n\nEverything else in ${productName} stays free: viewing, find, go to offset, the data inspector, editing, insert and delete, and compare.`);
+    return lic.requirePro(f.title, `${tried}${f.detail}\n\n${PRICE_LINE}${ANCHOR_LINE ? '\n\n' + ANCHOR_LINE : ''}\n\nEverything else in ${productName} stays free: viewing, find, go to offset, the data inspector, editing, insert and delete, and compare.`);
   }
 
   /** Licensed, or a free try is left (used up here). Otherwise the explanation. */
@@ -101,4 +106,4 @@ function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex V
   };
 }
 
-module.exports = { createPro, FEATURES, SKU, TRIAL_USES };
+module.exports = { createPro, FEATURES, SKU, TRIAL_USES, ANCHOR_LINE };

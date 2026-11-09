@@ -14,7 +14,8 @@ Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, 
 - You can get anywhere. Go to an offset in hex or decimal, or jump by `+0x100` or `-16`. Find hex bytes with `??` wildcards, text, or UTF-16 text. The status bar shows the offset of the cursor.
 - Editing stays put. Type two hex digits to overwrite a byte, or press Insert to add bytes. Delete, cut and paste work on any selection. Every step can be undone.
 - Compare two files. Select two files in the Explorer and pick "Compare in Hex Viewer". F7 jumps to the next difference, also in two 4 GB files.
-- Pro, if you want it: a Structure view that reads PNG, ZIP, ELF, PE, Mach-O, PDF, SQLite and 13 more formats with binary templates, bookmarks with notes, checksums, a compare report and find in many files. Each Pro feature has 3 free tries. Zovo Pro is USD 19 once for every Zovo viewer.
+- Structure view, free at the top level: binary templates read ELF, PE, Mach-O, UF2, device tree, U-Boot uImage, Android boot.img, WebAssembly, DEX, PNG, ZIP, PDF, SQLite and 13 more formats.
+- Pro, if you want it: the nested fields of every template (ELF symbols and dynamic table, PE imports and resources, and more), bookmarks with notes, checksums, a compare report and find in many files. Each Pro feature has 3 free tries. Zovo Pro is USD 19 once for every Zovo viewer.
 
 ## Quick start
 
@@ -90,7 +91,8 @@ Everything above is free and stays free, in this version and every later one: vi
 | View, find, go to offset, copy as, data inspector | yes | yes |
 | Edit, insert and delete bytes, safe save, undo | yes | yes |
 | Compare two files side by side, F7 to the next difference | yes | yes |
-| Structure view: binary templates for 20 formats, your own templates, export as JSON or C | 3 tries | yes |
+| Structure view, top level: the root and its fields for all 26 built-in templates and your own | yes | yes |
+| Structure view, nested fields (ELF symbols and dynamic table, PE imports and resources...), export as JSON or C | 3 tries | yes |
 | Bookmarks with a name, a color and a note, saved per file, export as Markdown | 3 tries | yes |
 | Checksums of the selection or file: CRC-32, Adler-32, MD5, SHA-1, SHA-256, SHA-512 | 3 tries | yes |
 | Compare report: every differing range to a text, CSV or JSON file | 3 tries | yes |
@@ -100,7 +102,12 @@ Everything above is free and stays free, in this version and every later one: vi
 
 Open the Structure tab in the side panel. Hex Viewer picks the template that fits the file from its first bytes and shows the fields as a tree: name, value, enum name, offset and size. Click a field to select its bytes in the grid. The tree reads unsaved edits too, and reads the file again after you type.
 
-The 20 built-in templates: PNG, JPEG, GIF, BMP, ICO and CUR, TIFF (also DNG and many camera raw files), WebP, WAV, FLAC, MP4, MOV, M4A and HEIC boxes, ZIP (also JAR, APK, DOCX, XLSX, EPUB), GZIP, TAR, PDF (header, xref table and trailer), SQLite header, ELF, PE (EXE, DLL, SYS), Mach-O (also universal binaries), Java class and PCAP.
+The top level of the tree is free and uses no try: the file's main fields and the size of each table. A field that holds more fields shows one row, such as "14 nested fields: Zovo Pro". A click on that row uses one of the 3 free tries and opens every level in that tab, so you can test it on your own files first.
+
+The 26 built-in templates:
+- Firmware: UF2, device tree blob (DTB, DTBO), U-Boot uImage, Android boot.img.
+- Code: ELF (with symbol and dynamic tables), PE: EXE, DLL, SYS (with imports and resources), Mach-O (also universal binaries), WebAssembly, Android DEX, Java class.
+- Files: PNG, JPEG, GIF, BMP, ICO and CUR, TIFF (also DNG and many camera raw files), WebP, WAV, FLAC, MP4, MOV, M4A and HEIC boxes, ZIP (also JAR, APK, DOCX, XLSX, EPUB), GZIP, TAR, PDF (header, xref table and trailer), SQLite header, PCAP.
 
 - "Template..." reads the file with another template. The choice is kept for that file.
 - "JSON" and "C struct" open the selected struct (or the whole file) in a new editor: the values as JSON, or packed C structs with an initializer that holds the values.

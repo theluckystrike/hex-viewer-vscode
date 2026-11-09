@@ -1,0 +1,88 @@
+{
+  "id": "wasm", "name": "WebAssembly module (.wasm)", "extensions": ["wasm"],
+  "match": [[{ "offset": 0, "hex": "00 61 73 6D" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "magic", "type": "bytes", "length": 4, "expect": "00 61 73 6D" },
+      { "name": "version", "type": "u32", "comment": "1 for a core module" },
+      { "name": "sections", "type": "Section", "until": "eof" }
+    ],
+    "Section": { "label": "id", "fields": [
+      { "name": "id", "type": "u8", "enum": "SectionId" },
+      { "name": "size_", "type": "uleb128" },
+      { "name": "body", "size": "size_", "type": { "switch": "id", "cases": { "0": "CustomSec", "1": "TypeSec", "2": "ImportSec", "3": "FunctionSec", "5": "MemorySec", "7": "ExportSec", "8": "StartSec", "10": "CodeSec", "11": "DataSec", "12": "DataCountSec" }, "default": "RawSec" } }
+    ] },
+    "RawSec": [ { "name": "bytes", "type": "bytes", "length": "end() - pos()" } ],
+    "CustomSec": { "label": "name", "fields": [
+      { "name": "name_len", "type": "uleb128" }, { "name": "name", "type": "string", "length": "name_len" },
+      { "name": "data", "type": "bytes", "length": "end() - pos()" }
+    ] },
+    "TypeSec": [
+      { "name": "count", "type": "uleb128" },
+      { "name": "types", "type": "FuncType", "count": "min(count, 10000)" }
+    ],
+    "FuncType": [
+      { "name": "form", "type": "u8", "format": "hex", "expect": 96 },
+      { "name": "param_count", "type": "uleb128" }, { "name": "params", "type": "u8", "enum": "ValType", "count": "param_count" },
+      { "name": "result_count", "type": "uleb128" }, { "name": "results", "type": "u8", "enum": "ValType", "count": "result_count" }
+    ],
+    "ImportSec": [
+      { "name": "count", "type": "uleb128" },
+      { "name": "imports", "type": "Import", "count": "min(count, 10000)" }
+    ],
+    "Import": { "label": "module + '.' + field", "fields": [
+      { "name": "module_len", "type": "uleb128" }, { "name": "module", "type": "string", "length": "module_len" },
+      { "name": "field_len", "type": "uleb128" }, { "name": "field", "type": "string", "length": "field_len" },
+      { "name": "kind", "type": "u8", "enum": "ExternKind" },
+      { "name": "type_index", "type": "uleb128", "if": "kind == 0" },
+      { "name": "table_type", "type": "u8", "enum": "ValType", "if": "kind == 1" },
+      { "name": "limits", "type": "Limits", "if": "kind == 1 || kind == 2" },
+      { "name": "global_type", "type": "u8", "enum": "ValType", "if": "kind == 3" },
+      { "name": "mutable", "type": "u8", "if": "kind == 3" },
+      { "name": "tag_attribute", "type": "u8", "if": "kind == 4" },
+      { "name": "tag_type_index", "type": "uleb128", "if": "kind == 4" }
+    ] },
+    "Limits": [
+      { "name": "flags", "type": "u8", "format": "hex" },
+      { "name": "min", "type": "uleb128" },
+      { "name": "max", "type": "uleb128", "if": "(flags & 1) != 0" }
+    ],
+    "FunctionSec": [
+      { "name": "count", "type": "uleb128" },
+      { "name": "type_indices", "type": "uleb128", "count": "min(count, 20000)" }
+    ],
+    "MemorySec": [
+      { "name": "count", "type": "uleb128" },
+      { "name": "memories", "type": "Limits", "count": "min(count, 100)" }
+    ],
+    "ExportSec": [
+      { "name": "count", "type": "uleb128" },
+      { "name": "exports", "type": "Export", "count": "min(count, 10000)" }
+    ],
+    "Export": { "label": "name", "fields": [
+      { "name": "name_len", "type": "uleb128" }, { "name": "name", "type": "string", "length": "name_len" },
+      { "name": "kind", "type": "u8", "enum": "ExternKind" },
+      { "name": "index", "type": "uleb128" }
+    ] },
+    "StartSec": [ { "name": "function_index", "type": "uleb128" } ],
+    "CodeSec": [
+      { "name": "count", "type": "uleb128" },
+      { "name": "bodies", "type": "Body", "count": "min(count, 10000)" }
+    ],
+    "Body": [
+      { "name": "size_", "type": "uleb128" },
+      { "name": "code", "type": "bytes", "length": "size_" }
+    ],
+    "DataSec": [
+      { "name": "count", "type": "uleb128" },
+      { "name": "segments", "type": "bytes", "length": "end() - pos()" }
+    ],
+    "DataCountSec": [ { "name": "count", "type": "uleb128" } ]
+  },
+  "enums": {
+    "SectionId": { "0": "custom", "1": "type", "2": "import", "3": "function", "4": "table", "5": "memory", "6": "global", "7": "export", "8": "start", "9": "element", "10": "code", "11": "data", "12": "data count", "13": "tag" },
+    "ValType": { "0x7F": "i32", "0x7E": "i64", "0x7D": "f32", "0x7C": "f64", "0x7B": "v128", "0x70": "funcref", "0x6F": "externref" },
+    "ExternKind": { "0": "function", "1": "table", "2": "memory", "3": "global", "4": "tag" }
+  }
+}

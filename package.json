@@ -2,7 +2,7 @@
   "name": "zovo-hex-viewer",
   "displayName": "Hex Viewer & Binary Viewer, Hex Editor (Large Files)",
   "description": "Hex viewer, binary viewer and hex editor for VS Code that opens files of any size (4 GB and more) in under a second. Insert and delete bytes, compare two files byte by byte, go to offset, find hex or text, a data inspector, copy as C array or base64. Free, works offline.",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "publisher": "zovo",
   "license": "MIT",
   "icon": "icon.png",
@@ -44,7 +44,12 @@
     "binary diff",
     "insert bytes",
     "binary template",
-    "struct viewer"
+    "struct viewer",
+    "elf viewer",
+    "pe viewer",
+    "dll viewer",
+    "uf2",
+    "device tree"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [

@@ -77,6 +77,10 @@ Operators: `+ - * /`, `//` (whole-number division), `%`, `<< >> & | ^ ~` (64-bit
 
 Functions: `min()`, `max()`, `abs()`, `align(x, n)`, `pos()` (the current offset), `size()` (the file size), `start()` (the offset of the current struct), `end()` (the end of the enclosing sized struct, or the file size), `len(x)`, `defined(x)`, `hex(x)`, `str(x)`, `oct(text)` (octal text, as in TAR), and `u8(offset)`, `u16(offset)`, `u32(offset)`, `u16le`, `u16be`, `u32le`, `u32be` to look at bytes anywhere in the file.
 
+`addr(table, a, 'vfield', 'sizefield', 'filefield')` maps an address through a list of structs, such as PE sections or ELF program headers. It finds the first item `e` with `e.vfield <= a < e.vfield + e.sizefield` and returns `a - e.vfield + e.filefield`, the file offset. When no item covers `a`, it returns -1. The PE template uses it to read the import table: `addr(pe.sections, rva, 'virtual_address', 'virtual_size', 'pointer_to_raw_data')`.
+
+A computed field (`value`) that later expressions read must have `"hidden": true`; a visible computed field is shown in the tree only. To show and reuse a value, add a hidden copy and a visible field that reads it, as the DEX template does with `desc` and `descriptor`.
+
 ## Limits
 
 A parse stops with a message after 50,000 fields, after 15 seconds, at 100,000 items in one list, or at structs nested 48 deep. An expression may have 2,000 characters and 20,000 steps. A search for a marker reads at most 16 MB. Fields that would run past the end of the file are cut there and marked.

@@ -1,0 +1,34 @@
+{
+  "id": "uimage", "name": "U-Boot legacy image (uImage)", "extensions": ["uimg", "uimage", "ub"],
+  "match": [[{ "offset": 0, "hex": "27 05 19 56" }]],
+  "endian": "big",
+  "structs": {
+    "File": [
+      { "name": "ih_magic", "type": "u32", "format": "hex", "expect": 654645590 },
+      { "name": "ih_hcrc", "type": "u32", "format": "hex", "comment": "CRC-32 of the 64-byte header, with this field set to 0" },
+      { "name": "ih_time", "type": "u32", "format": "unix" },
+      { "name": "ih_size", "type": "u32", "comment": "Size of the image data" },
+      { "name": "ih_load", "type": "u32", "format": "hex", "comment": "Load address" },
+      { "name": "ih_ep", "type": "u32", "format": "hex", "comment": "Entry point" },
+      { "name": "ih_dcrc", "type": "u32", "format": "hex", "comment": "CRC-32 of the image data" },
+      { "name": "ih_os", "type": "u8", "enum": "Os" },
+      { "name": "ih_arch", "type": "u8", "enum": "Arch" },
+      { "name": "ih_type", "type": "u8", "enum": "Type" },
+      { "name": "ih_comp", "type": "u8", "enum": "Comp" },
+      { "name": "ih_name", "type": "char", "length": 32 },
+      { "name": "data", "type": "bytes", "length": "ih_size", "if": "ih_type != 4" },
+      { "name": "image_sizes", "type": "u32", "count": 64, "until": "_ == 0", "if": "ih_type == 4", "comment": "Multi-file image: one size per part, then 0" },
+      { "name": "parts", "type": "Part", "count": "image_sizes.length - 1", "if": "ih_type == 4" }
+    ],
+    "Part": [
+      { "name": "data", "type": "bytes", "length": "image_sizes[i]" },
+      { "align": 4 }
+    ]
+  },
+  "enums": {
+    "Os": { "0": "Invalid", "1": "OpenBSD", "2": "NetBSD", "3": "FreeBSD", "5": "Linux", "14": "VxWorks", "16": "QNX", "17": "U-Boot", "18": "RTEMS", "25": "ARM Trusted Firmware", "26": "TEE", "27": "OpenSBI", "28": "EFI" },
+    "Arch": { "0": "Invalid", "1": "Alpha", "2": "ARM", "3": "x86", "4": "IA-64", "5": "MIPS", "6": "MIPS64", "7": "PowerPC", "8": "S390", "9": "SuperH", "10": "SPARC", "11": "SPARC64", "12": "M68K", "14": "MicroBlaze", "15": "Nios II", "16": "Blackfin", "17": "AVR32", "19": "Sandbox", "20": "NDS32", "21": "OpenRISC", "22": "ARM64", "23": "ARC", "24": "x86-64", "25": "Xtensa", "26": "RISC-V" },
+    "Type": { "0": "Invalid", "1": "Standalone program", "2": "OS kernel", "3": "RAM disk", "4": "Multi-file image", "5": "Firmware", "6": "Script", "7": "Filesystem", "8": "Flat device tree", "14": "OS kernel (no load)" },
+    "Comp": { "0": "None", "1": "gzip", "2": "bzip2", "3": "LZMA", "4": "LZO", "5": "LZ4", "6": "Zstandard" }
+  }
+}

@@ -221,24 +221,43 @@ async function open(file) {
   return { doc, ...p };
 }
 
-test('host: without a license the Structure view is locked, nothing pops up on open, free features work', async () => {
+test('host: without a license the Structure view shows the top level free, nested fields cost a try, nothing pops up on open', async () => {
   const png = path.join(tmp, 'h.png');
   fs.copyFileSync(path.join(__dirname, '..', 'images', 'hex-viewer-png.png'), png);
   state.modal = [];
   const v = await open(png);
   assert.equal(state.modal.length, 0, 'no popup on open');
+  assert.equal(v.sent.filter(m => m.type === 'struct').length, 0, 'no parse before the Structure tab is opened');
   await v.send({ type: 'structDetect' }); await settle();
   assert.equal(v.last('structInfo').best.id, 'png');
   assert.equal(v.last('structInfo').licensed, false);
-  await v.send({ type: 'structParse' }); await settle();
-  assert.equal(v.last('struct').locked, true);
-  assert.equal(v.last('struct').trial, 3);
-  // a free try opens the Structure view of this tab, and re-reads after edits do not use more tries
-  await v.send({ type: 'proTry', feature: 'templates' }); await settle(80);
-  assert.equal(v.last('struct').id, 'png');
+  // EXEC13 depth split: level 1 is free and uses no try
   await v.send({ type: 'structParse' }); await settle(80);
-  assert.equal(v.last('struct').id, 'png');
+  let s = v.last('struct');
+  assert.equal(s.id, 'png'); assert.equal(s.free, true); assert.equal(s.trial, 3);
+  assert.deepEqual(s.tree.c.map(c => c.n), ['signature', 'chunks']);
+  assert.equal(s.tree.c[0].v !== undefined, true, 'a top-level value shows its value');
+  assert.equal(s.tree.c[1].c, undefined, 'nested fields are not sent');
+  assert.ok(s.tree.c[1].p > 10, 'the count of nested fields is');
+  assert.equal(state.global.get('hexViewer.proTrial'), undefined, 'no try used');
+  await v.send({ type: 'structParse' }); await settle(80);
+  assert.equal(v.last('struct').free, true);
+  assert.equal(state.global.get('hexViewer.proTrial'), undefined, 'reading again uses no try');
+  // picking a template is free too
+  state.picks = [items => items.find(i => i.id === 'png')];
+  await v.send({ type: 'structPick' }); await settle(80);
+  assert.equal(v.last('struct').free, true);
+  assert.equal(state.global.get('hexViewer.proTrial'), undefined);
+  // a click on "N nested fields: Zovo Pro" uses 1 try and opens every level of this tab; re-reads use no more
+  await v.send({ type: 'proTry', feature: 'templates' }); await settle(80);
+  s = v.last('struct');
+  assert.equal(s.id, 'png'); assert.equal(s.free, false);
+  assert.equal(s.tree.c[1].c[0].l, 'IHDR');
   assert.equal(state.global.get('hexViewer.proTrial').templates, 1);
+  await v.send({ type: 'structParse' }); await settle(80);
+  assert.equal(v.last('struct').free, false);
+  assert.equal(state.global.get('hexViewer.proTrial').templates, 1);
+  assert.equal(state.modal.length, 0);
   // bookmarks: 3 free tries, Escape on the name does not use one, the 4th explains Pro with both ways in
   state.modalAnswer = undefined;
   state.inputs = [undefined];
@@ -268,6 +287,35 @@ test('host: without a license the Structure view is locked, nothing pops up on o
   state.modalAnswer = 'Get Zovo Pro';
   await v.send({ type: 'proExplain', feature: 'templates' }); await settle();
   assert.deepEqual(state.external, ['https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878']);
+});
+
+test('host (EXEC13): 3 nested clicks in 3 tabs use the 3 tries, the 4th shows the Pro panel with the 010 Editor line', async () => {
+  const elf = path.join(tmp, 'tries.elf');
+  const b = Buffer.alloc(64); b.write('\x7fELF', 0, 'latin1'); b[4] = 2; b[5] = 1; b[6] = 1; b.writeUInt16LE(2, 16); b.writeUInt16LE(0x3e, 18); b.writeUInt16LE(64, 52);
+  fs.writeFileSync(elf, b);
+  state.global.delete('hexViewer.proTrial'); state.modal = []; state.modalAnswer = undefined;
+  for (let i = 1; i <= 3; i++) {
+    const v = await open(elf);
+    await v.send({ type: 'structParse' }); await settle(80);
+    assert.equal(v.last('struct').free, true);
+    assert.equal(v.last('struct').trial, 4 - i);
+    await v.send({ type: 'proTry', feature: 'templates' }); await settle(80);
+    assert.equal(v.last('struct').free, false);
+    assert.equal(state.global.get('hexViewer.proTrial').templates, i);
+  }
+  assert.equal(state.modal.length, 0, 'no panel while tries are left');
+  const v = await open(elf);
+  await v.send({ type: 'structParse' }); await settle(80);
+  assert.equal(v.last('struct').free, true, 'the top level stays free with no tries left');
+  assert.equal(v.last('struct').trial, 0);
+  await v.send({ type: 'proTry', feature: 'templates' }); await settle(80);
+  assert.equal(state.modal.length, 1, 'the 4th click shows the Pro panel');
+  assert.match(state.modal[0].msg, /Nested fields in the Structure view is part of Zovo Pro/);
+  assert.match(state.modal[0].detail, /010 Editor costs USD 59\.95 \(home\) or 149\.95 \(commercial\); Zovo Pro is USD 19 once/);
+  assert.match(state.modal[0].detail, /used the 3 free tries/);
+  assert.equal(v.last('struct').free, true, 'still the free tree after Cancel');
+  assert.equal(state.global.get('hexViewer.proTrial').templates, 3);
+  state.global.delete('hexViewer.proTrial'); state.modal = [];
 });
 
 test('host: the Get Pro command opens the same page; no network on open or activation', async () => {

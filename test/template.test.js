@@ -21,9 +21,9 @@ const byId = id => BUILTIN.find(t => t.id === id);
 const errors = root => { const out = []; const walk = n => { if (n.error) out.push(`${n.name}: ${n.error}`); (n.children || []).forEach(walk); }; walk(root); return out; };
 const find = (node, pathStr) => pathStr.split('.').reduce((n, k) => n && n.children.find(c => c.name === k), node);
 
-test('20 built-in templates, all valid', () => {
-  assert.equal(BUILTIN.length, 20);
-  assert.equal(new Set(BUILTIN.map(t => t.id)).size, 20);
+test('26 built-in templates, all valid', () => {
+  assert.equal(BUILTIN.length, 26);
+  assert.equal(new Set(BUILTIN.map(t => t.id)).size, 26);
   for (const t of BUILTIN) assert.deepEqual(T.checkTemplate(t), [], t.id);
 });
 

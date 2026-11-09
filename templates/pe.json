@@ -6,8 +6,73 @@
     "File": [
       { "name": "dos_header", "type": "DosHeader" },
       { "name": "pe", "type": "PeHeaders", "at": "dos_header.e_lfanew", "if": "dos_header.e_lfanew + 24 <= size() && u32le(dos_header.e_lfanew) == 0x4550" },
-      { "name": "note", "value": "'No PE header: an MS-DOS program'", "if": "!(dos_header.e_lfanew + 24 <= size() && u32le(dos_header.e_lfanew) == 0x4550)" }
+      { "name": "note", "value": "'No PE header: an MS-DOS program'", "if": "!(dos_header.e_lfanew + 24 <= size() && u32le(dos_header.e_lfanew) == 0x4550)" },
+      { "name": "is_pe", "hidden": true, "value": "dos_header.e_lfanew + 24 <= size() && u32le(dos_header.e_lfanew) == 0x4550" },
+      { "name": "has_opt", "hidden": true, "value": "is_pe && pe.coff.size_of_optional_header >= 2 && (u16le(pe.optional_header.offset) == 0x10B || u16le(pe.optional_header.offset) == 0x20B)" },
+      { "name": "kind", "value": "(pe.coff.characteristics & 0x2000) ? 'DLL' : 'Executable'", "if": "is_pe" },
+      { "name": "machine", "value": "pe.coff.machine", "enum": "Machine", "if": "is_pe" },
+      { "name": "subsystem", "value": "pe.optional_header.common.subsystem", "enum": "Subsystem", "if": "has_opt" },
+      { "name": "entry_point_rva", "value": "pe.optional_header.address_of_entry_point", "format": "hex", "if": "has_opt" },
+      { "name": "section_count", "value": "pe.coff.number_of_sections", "format": "dec", "if": "is_pe" },
+      { "name": "import_offset", "hidden": true, "value": "has_opt && len(pe.optional_header.data_directories) > 1 && pe.optional_header.data_directories[1].virtual_address > 0 ? addr(pe.sections, pe.optional_header.data_directories[1].virtual_address, 'virtual_address', 'virtual_size', 'pointer_to_raw_data') : -1" },
+      { "name": "imports", "type": "ImportDescriptor", "count": "min(256, (size() - import_offset) // 20)", "until": "_.name_rva == 0", "at": "import_offset", "peek": true, "if": "import_offset > 0 && import_offset + 20 <= size()" },
+      { "name": "resource_offset", "hidden": true, "value": "has_opt && len(pe.optional_header.data_directories) > 2 && pe.optional_header.data_directories[2].virtual_address > 0 ? addr(pe.sections, pe.optional_header.data_directories[2].virtual_address, 'virtual_address', 'virtual_size', 'pointer_to_raw_data') : -1" },
+      { "name": "resources", "type": "ResourceRoot", "at": "resource_offset", "peek": true, "if": "resource_offset > 0 && resource_offset + 16 <= size()" }
     ],
+    "ImportDescriptor": { "label": "name_offset > 0 && name_offset < size() ? dll : '(end of the list)'", "fields": [
+      { "name": "original_first_thunk", "type": "u32", "format": "hex", "comment": "RVA of the import lookup table" },
+      { "name": "time_date_stamp", "type": "u32" },
+      { "name": "forwarder_chain", "type": "u32", "format": "hex" },
+      { "name": "name_rva", "type": "u32", "format": "hex" },
+      { "name": "first_thunk", "type": "u32", "format": "hex", "comment": "RVA of the import address table" },
+      { "name": "name_offset", "hidden": true, "value": "name_rva ? addr(pe.sections, name_rva, 'virtual_address', 'virtual_size', 'pointer_to_raw_data') : -1" },
+      { "name": "dll", "type": "zstring", "length": 256, "encoding": "latin1", "at": "name_offset", "peek": true, "if": "name_offset > 0 && name_offset < size()" },
+      { "name": "lookup_offset", "hidden": true, "value": "name_rva && (original_first_thunk || first_thunk) ? addr(pe.sections, original_first_thunk ? original_first_thunk : first_thunk, 'virtual_address', 'virtual_size', 'pointer_to_raw_data') : -1" },
+      { "name": "functions", "type": { "switch": "u16le(pe.optional_header.offset)", "cases": { "0x20B": "Thunk64" }, "default": "Thunk32" }, "count": "min(300, (size() - lookup_offset) // (u16le(pe.optional_header.offset) == 0x20B ? 8 : 4))", "until": "_.raw == 0", "at": "lookup_offset", "peek": true, "if": "lookup_offset > 0 && lookup_offset + 4 <= size()" }
+    ] },
+    "Thunk32": { "label": "by_ordinal ? 'ordinal ' + str(raw & 0xFFFF) : hint_offset > 0 && hint_offset + 2 < size() ? name : ''", "fields": [
+      { "name": "raw", "type": "u32", "format": "hex" },
+      { "name": "by_ordinal", "hidden": true, "value": "raw != 0 && (raw >> 31) == 1" },
+      { "name": "ordinal", "value": "raw & 0xFFFF", "format": "dec", "if": "by_ordinal" },
+      { "name": "hint_offset", "hidden": true, "value": "raw != 0 && !by_ordinal ? addr(pe.sections, raw & 0x7FFFFFFF, 'virtual_address', 'virtual_size', 'pointer_to_raw_data') : -1" },
+      { "name": "hint", "type": "u16", "at": "hint_offset", "peek": true, "if": "hint_offset > 0 && hint_offset + 2 < size()" },
+      { "name": "name", "type": "zstring", "length": 256, "encoding": "latin1", "at": "hint_offset + 2", "peek": true, "if": "hint_offset > 0 && hint_offset + 2 < size()" }
+    ] },
+    "Thunk64": { "label": "by_ordinal ? 'ordinal ' + str(raw & 0xFFFF) : hint_offset > 0 && hint_offset + 2 < size() ? name : ''", "fields": [
+      { "name": "raw", "type": "u64", "format": "hex" },
+      { "name": "by_ordinal", "hidden": true, "value": "raw != 0 && (raw >> 63) == 1" },
+      { "name": "ordinal", "value": "raw & 0xFFFF", "format": "dec", "if": "by_ordinal" },
+      { "name": "hint_offset", "hidden": true, "value": "raw != 0 && !by_ordinal ? addr(pe.sections, raw & 0x7FFFFFFF, 'virtual_address', 'virtual_size', 'pointer_to_raw_data') : -1" },
+      { "name": "hint", "type": "u16", "at": "hint_offset", "peek": true, "if": "hint_offset > 0 && hint_offset + 2 < size()" },
+      { "name": "name", "type": "zstring", "length": 256, "encoding": "latin1", "at": "hint_offset + 2", "peek": true, "if": "hint_offset > 0 && hint_offset + 2 < size()" }
+    ] },
+    "ResourceRoot": [
+      { "name": "characteristics", "type": "u32" }, { "name": "time_date_stamp", "type": "u32" },
+      { "name": "major_version", "type": "u16" }, { "name": "minor_version", "type": "u16" },
+      { "name": "named_entries", "type": "u16" }, { "name": "id_entries", "type": "u16" },
+      { "name": "types", "type": "ResourceTypeEntry", "count": "min(named_entries + id_entries, 256)" }
+    ],
+    "ResourceTypeEntry": { "label": "type", "fields": [
+      { "name": "type", "type": "u32", "enum": "ResType", "if": "(u32le(start()) >> 31) == 0" },
+      { "name": "name_ref", "type": "u32", "format": "hex", "if": "(u32le(start()) >> 31) == 1" },
+      { "name": "offset_to_data", "type": "u32", "format": "hex", "comment": "The top bit set: a subdirectory" },
+      { "name": "type_name", "type": "ResString", "at": "resource_offset + (u32le(start()) & 0x7FFFFFFF)", "peek": true, "if": "(u32le(start()) >> 31) == 1 && resource_offset + (u32le(start()) & 0x7FFFFFFF) + 2 <= size()" },
+      { "name": "entries", "type": "ResourceDir", "at": "resource_offset + (offset_to_data & 0x7FFFFFFF)", "peek": true, "if": "(offset_to_data >> 31) == 1 && resource_offset + (offset_to_data & 0x7FFFFFFF) + 16 <= size()" }
+    ] },
+    "ResourceDir": [
+      { "name": "characteristics", "type": "u32" }, { "name": "time_date_stamp", "type": "u32" },
+      { "name": "major_version", "type": "u16" }, { "name": "minor_version", "type": "u16" },
+      { "name": "named_entries", "type": "u16" }, { "name": "id_entries", "type": "u16" },
+      { "name": "items", "type": "ResourceEntry", "count": "min(named_entries + id_entries, 256)" }
+    ],
+    "ResourceEntry": { "label": "(u32le(start()) >> 31) == 1 ? 'named' : 'id ' + str(u32le(start()))", "fields": [
+      { "name": "name_or_id", "type": "u32", "format": "hex" },
+      { "name": "offset_to_data", "type": "u32", "format": "hex", "comment": "The top bit set: a subdirectory (language level)" }
+    ] },
+    "ResString": { "label": "text", "fields": [
+      { "name": "length", "type": "u16" },
+      { "name": "text", "type": "string", "length": "length * 2", "encoding": "utf16le" }
+    ] },
     "DosHeader": [
       { "name": "e_magic", "type": "char", "length": 2 },
       { "name": "e_cblp", "type": "u16" }, { "name": "e_cp", "type": "u16" }, { "name": "e_crlc", "type": "u16" }, { "name": "e_cparhdr", "type": "u16" },
@@ -19,7 +84,7 @@
     "PeHeaders": [
       { "name": "signature", "type": "bytes", "length": 4, "expect": "50 45 00 00" },
       { "name": "coff", "type": [
-        { "name": "machine", "type": "u16", "enum": { "0x14C": "x86", "0x8664": "x64", "0x1C0": "ARM", "0x1C4": "ARMv7 Thumb-2", "0xAA64": "ARM64", "0x200": "Itanium", "0x5064": "RISC-V 64", "0xEBC": "EFI byte code" } },
+        { "name": "machine", "type": "u16", "enum": "Machine" },
         { "name": "number_of_sections", "type": "u16" },
         { "name": "time_date_stamp", "type": "u32", "format": "unix" },
         { "name": "pointer_to_symbol_table", "type": "u32", "format": "hex" }, { "name": "number_of_symbols", "type": "u32" },
@@ -57,7 +122,7 @@
       { "name": "os_major", "type": "u16" }, { "name": "os_minor", "type": "u16" }, { "name": "image_major", "type": "u16" }, { "name": "image_minor", "type": "u16" },
       { "name": "subsystem_major", "type": "u16" }, { "name": "subsystem_minor", "type": "u16" }, { "name": "win32_version", "type": "u32" },
       { "name": "size_of_image", "type": "u32" }, { "name": "size_of_headers", "type": "u32" }, { "name": "checksum", "type": "u32", "format": "hex" },
-      { "name": "subsystem", "type": "u16", "enum": { "1": "Native", "2": "Windows GUI", "3": "Windows console", "9": "Windows CE", "10": "EFI application", "11": "EFI boot driver", "12": "EFI runtime driver", "14": "Xbox", "16": "Windows boot" } },
+      { "name": "subsystem", "type": "u16", "enum": "Subsystem" },
       { "name": "dll_characteristics", "type": "u16", "flags": { "0x20": "HIGH_ENTROPY_VA", "0x40": "DYNAMIC_BASE", "0x80": "FORCE_INTEGRITY", "0x100": "NX_COMPAT", "0x200": "NO_ISOLATION", "0x400": "NO_SEH", "0x800": "NO_BIND", "0x1000": "APPCONTAINER", "0x2000": "WDM_DRIVER", "0x4000": "GUARD_CF", "0x8000": "TERMINAL_SERVER_AWARE" } }
     ],
     "DataDir": { "label": "i == 0 ? 'Export' : i == 1 ? 'Import' : i == 2 ? 'Resource' : i == 3 ? 'Exception' : i == 4 ? 'Certificate' : i == 5 ? 'Base relocation' : i == 6 ? 'Debug' : i == 7 ? 'Architecture' : i == 8 ? 'Global pointer' : i == 9 ? 'TLS' : i == 10 ? 'Load config' : i == 11 ? 'Bound import' : i == 12 ? 'IAT' : i == 13 ? 'Delay import' : i == 14 ? 'CLR runtime (.NET)' : 'Reserved'", "fields": [
@@ -71,5 +136,10 @@
       { "name": "number_of_relocations", "type": "u16" }, { "name": "number_of_linenumbers", "type": "u16" },
       { "name": "characteristics", "type": "u32", "flags": { "0x20": "CODE", "0x40": "INITIALIZED_DATA", "0x80": "UNINITIALIZED_DATA", "0x2000000": "DISCARDABLE", "0x10000000": "SHARED", "0x20000000": "EXECUTE", "0x40000000": "READ", "0x80000000": "WRITE" } }
     ] }
+  },
+  "enums": {
+    "Machine": { "0x14C": "x86", "0x8664": "x64", "0x1C0": "ARM", "0x1C4": "ARMv7 Thumb-2", "0xAA64": "ARM64", "0x200": "Itanium", "0x5064": "RISC-V 64", "0xEBC": "EFI byte code" },
+    "Subsystem": { "1": "Native", "2": "Windows GUI", "3": "Windows console", "9": "Windows CE", "10": "EFI application", "11": "EFI boot driver", "12": "EFI runtime driver", "14": "Xbox", "16": "Windows boot" },
+    "ResType": { "1": "CURSOR", "2": "BITMAP", "3": "ICON", "4": "MENU", "5": "DIALOG", "6": "STRING", "7": "FONTDIR", "8": "FONT", "9": "ACCELERATOR", "10": "RCDATA", "11": "MESSAGETABLE", "12": "GROUP_CURSOR", "14": "GROUP_ICON", "16": "VERSION", "17": "DLGINCLUDE", "19": "PLUGPLAY", "20": "VXD", "21": "ANICURSOR", "22": "ANIICON", "23": "HTML", "24": "MANIFEST" }
   }
 }

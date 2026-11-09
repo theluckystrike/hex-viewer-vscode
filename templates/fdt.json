@@ -1,0 +1,45 @@
+{
+  "id": "fdt", "name": "Device tree blob (DTB, flattened device tree)", "extensions": ["dtb", "dtbo"],
+  "match": [[{ "offset": 0, "hex": "D0 0D FE ED" }, { "offset": 20, "type": "u32", "endian": "big", "min": 1, "max": 64 }]],
+  "endian": "big",
+  "structs": {
+    "File": [
+      { "name": "magic", "type": "u32", "format": "hex", "expect": 3490578157 },
+      { "name": "totalsize", "type": "u32" },
+      { "name": "off_dt_struct", "type": "u32", "format": "hex" },
+      { "name": "off_dt_strings", "type": "u32", "format": "hex" },
+      { "name": "off_mem_rsvmap", "type": "u32", "format": "hex" },
+      { "name": "version", "type": "u32" },
+      { "name": "last_comp_version", "type": "u32" },
+      { "name": "boot_cpuid_phys", "type": "u32", "if": "version >= 2" },
+      { "name": "size_dt_strings", "type": "u32", "if": "version >= 3" },
+      { "name": "size_dt_struct", "type": "u32", "if": "version >= 17" },
+      { "name": "memory_reservations", "type": "Reservation", "count": "min(1024, (size() - off_mem_rsvmap) // 16)", "until": "_.address == 0 && _.size_ == 0", "at": "off_mem_rsvmap", "peek": true, "if": "off_mem_rsvmap > 0 && off_mem_rsvmap + 16 <= size()" },
+      { "name": "root_node", "type": "Node", "at": "off_dt_struct", "if": "off_dt_struct > 0 && off_dt_struct + 4 <= size() && u32(off_dt_struct) == 1" }
+    ],
+    "Reservation": { "label": "hex(address)", "fields": [
+      { "name": "address", "type": "u64", "format": "hex" },
+      { "name": "size_", "type": "u64" }
+    ] },
+    "Node": { "label": "name == '' ? '/' : name", "fields": [
+      { "name": "token", "type": "u32", "enum": "Token", "expect": 1 },
+      { "name": "name", "type": "zstring", "length": 256 },
+      { "align": 4 },
+      { "name": "items", "type": { "switch": "u32(pos())", "cases": { "1": "Node", "3": "Prop", "4": "Nop" }, "default": "Unknown" }, "while": "u32(pos()) != 2 && u32(pos()) != 9", "count": 8192 },
+      { "name": "end", "type": "u32", "enum": "Token", "expect": 2 }
+    ] },
+    "Prop": { "label": "prop_name", "fields": [
+      { "name": "token", "type": "u32", "enum": "Token" },
+      { "name": "len", "type": "u32" },
+      { "name": "nameoff", "type": "u32" },
+      { "name": "prop_name", "type": "zstring", "length": 256, "at": "off_dt_strings + nameoff", "peek": true, "if": "off_dt_strings + nameoff < size()" },
+      { "name": "text", "type": "zstring", "length": "len", "peek": true, "if": "len > 1 && pos() + len <= size() && u8(pos() + len - 1) == 0 && u8(pos()) >= 32 && u8(pos()) < 127" },
+      { "name": "cell", "type": "u32", "format": "hex", "peek": true, "if": "len == 4" },
+      { "name": "value", "type": "bytes", "length": "len" },
+      { "align": 4 }
+    ] },
+    "Nop": [ { "name": "token", "type": "u32", "enum": "Token" } ],
+    "Unknown": [ { "name": "token", "type": "u32", "enum": "Token", "comment": "Not a token this place allows" } ]
+  },
+  "enums": { "Token": { "1": "BEGIN_NODE", "2": "END_NODE", "3": "PROP", "4": "NOP", "9": "END" } }
+}

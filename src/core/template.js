@@ -620,6 +620,29 @@ function toWire(node, budget = { left: 50000 }) {
   return w;
 }
 
+/** Number of fields below `node` (all levels), counted up to `cap`. */
+function countNested(node, cap = 1e6) {
+  let n = 0;
+  const stack = [...(node.children || [])];
+  while (stack.length && n < cap) { const c = stack.pop(); n++; if (c.children) for (const k of c.children) stack.push(k); }
+  return n;
+}
+
+/**
+ * The free Structure view (0.3.4): the root and its direct fields only. A field with fields of its own comes
+ * without them and carries p = how many nested fields it holds (Zovo Pro shows them). Same wire shape as toWire.
+ */
+function toWireTop(root) {
+  const w = toWire({ ...root, children: [] });
+  w.c = [];
+  for (const c of root.children || []) {
+    const cw = toWire({ ...c, children: c.children ? [] : undefined });
+    if (c.children) { delete cw.c; const n = countNested(c); if (n) cw.p = n; else cw.c = []; }
+    w.c.push(cw);
+  }
+  return w;
+}
+
 /** Values as JSON: structs become objects, arrays lists, numbers numbers (u64 above 2^53 as text). */
 function toJson(node, depth = 0) {
   if (depth > 200) return null;
@@ -713,4 +736,4 @@ function parseJsonc(text) {
   return JSON.parse(out);
 }
 
-module.exports = { parse, detect, checkTemplate, toWire, toJson, toC, parseJsonc, parseHex, Reader, PRIM, DEFAULT_LIMITS };
+module.exports = { parse, detect, checkTemplate, toWire, toWireTop, countNested, toJson, toC, parseJsonc, parseHex, Reader, PRIM, DEFAULT_LIMITS };

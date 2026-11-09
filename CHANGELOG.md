@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.4 (2026-11-10)
+
+- The Structure view is now free at the top level: the root and its fields for every template, with no try used. A field that holds more fields shows one row, "N nested fields: Zovo Pro". A click on it uses one of the 3 free tries and opens every level in that tab. Before, the whole Structure view was Pro after 3 tries. Picking another template is free too.
+- 6 new templates written from the public specs: UF2, device tree blob (DTB), U-Boot uImage, Android boot.img, WebAssembly and Android DEX (26 in all).
+- ELF: symbol tables (.symtab, .dynsym) with names, and the dynamic table with needed libraries. PE: imported DLLs and functions, and the resource directory.
+- When no template fits, the Structure tab now offers 3 choices: request one (free), a template for your format in 2 working days for USD 49 with Zovo Pro included (GitHub Sponsors, or PayPal), or custom work for USD 299 once. It still shows at most once per session and never when a file opens.
+- The Pro window compares the price with 010 Editor.
+- Everything else in 0.3.3 is unchanged: the free viewer and editor, the other Pro tools with 3 free tries, the rating question and the support links.
+
 ## 0.3.3 (2026-11-10)
 
 - When no structure template fits the open file, the Structure tab (or the template picker) shows one line: "No template for this format. Request one (free), or we build it for USD 299 once." The first link opens the format request form on GitHub with the file extension filled in (never the file name). The second opens the GitHub Sponsors tier for custom format support. The template picker also gets "None of these matches this file" when the matching templates are wrong.

@@ -91,12 +91,12 @@ try {
       if (d || /Pro/.test(n) || p.panel !== 'inspector' || p.licensed || badges.length !== 2 || badges.includes('none')) throw new Error(JSON.stringify({ d, n, p, badges }));
       return { badges, panel: p.panel };
     });
-    await step('free: the Structure tab explains itself, names the matching template and offers a free try, Get Pro and Enter key', async () => {
+    await step('free: the Structure tab explains itself, names the matching template and offers a free try, Get Pro and Unlock', async () => {
       await tab('struct');
       const ok = await vs.waitFor(async () => { const t = await E(`(document.querySelector('.pane.struct .locked') || {}).textContent || ''`); return /PNG image template/.test(t) && /3 of 3 free tries left/.test(t) && t; }, 8000);
       const buttons = JSON.parse(await E(`JSON.stringify([...document.querySelectorAll('.pane.struct .locked button')].map(b => b.textContent))`));
       await shot('free-struct-locked');
-      if (!ok || !buttons.includes('Get Pro') || !buttons.includes('Enter key') || !buttons.includes('Try it on this file')) throw new Error(JSON.stringify({ ok, buttons }));
+      if (!ok || !buttons.includes('Get Pro') || !buttons.includes('Unlock') || !buttons.includes('Try it on this file')) throw new Error(JSON.stringify({ ok, buttons }));
       if (await dialog()) throw new Error('a dialog opened on a tab click');
       return { text: ok.slice(0, 300), buttons };
     });

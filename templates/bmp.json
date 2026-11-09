@@ -1,0 +1,32 @@
+{
+  "id": "bmp", "name": "BMP image", "extensions": ["bmp", "dib"],
+  "match": [[{ "offset": 0, "text": "BM" }, { "offset": 14, "type": "u32", "min": 12, "max": 124 }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "file_header", "type": [
+        { "name": "signature", "type": "char", "length": 2, "expect": "BM" },
+        { "name": "file_size", "type": "u32" },
+        { "name": "reserved", "type": "u32" },
+        { "name": "pixel_offset", "type": "u32", "format": "hex" }
+      ] },
+      { "name": "dib_header", "type": "Dib" },
+      { "name": "color_table", "type": "Rgbq", "count": "dib_header.colors_used ? dib_header.colors_used : (1 << dib_header.bits_per_pixel)", "if": "defined(dib_header.bits_per_pixel) && dib_header.bits_per_pixel <= 8" },
+      { "name": "pixels", "type": "bytes", "at": "file_header.pixel_offset", "length": "size() - file_header.pixel_offset" }
+    ],
+    "Dib": [
+      { "name": "header_size", "type": "u32", "enum": { "12": "BITMAPCOREHEADER", "40": "BITMAPINFOHEADER", "52": "BITMAPV2INFOHEADER", "56": "BITMAPV3INFOHEADER", "108": "BITMAPV4HEADER", "124": "BITMAPV5HEADER" } },
+      { "name": "width", "type": "i16", "if": "header_size == 12" }, { "name": "height", "type": "i16", "if": "header_size == 12" },
+      { "name": "width", "type": "i32", "if": "header_size > 12" }, { "name": "height", "type": "i32", "if": "header_size > 12", "comment": "Negative: rows run top to bottom" },
+      { "name": "planes", "type": "u16" }, { "name": "bits_per_pixel", "type": "u16" },
+      { "name": "compression", "type": "u32", "if": "header_size > 12", "enum": { "0": "BI_RGB", "1": "BI_RLE8", "2": "BI_RLE4", "3": "BI_BITFIELDS", "4": "BI_JPEG", "5": "BI_PNG", "6": "BI_ALPHABITFIELDS" } },
+      { "name": "image_size", "type": "u32", "if": "header_size > 12" },
+      { "name": "x_pixels_per_metre", "type": "i32", "if": "header_size > 12" }, { "name": "y_pixels_per_metre", "type": "i32", "if": "header_size > 12" },
+      { "name": "colors_used", "type": "u32", "if": "header_size > 12" }, { "name": "colors_important", "type": "u32", "if": "header_size > 12" },
+      { "name": "colors_used", "value": "0", "hidden": true, "if": "header_size == 12" },
+      { "name": "masks", "type": "u32", "format": "hex", "count": "header_size >= 56 ? 4 : header_size >= 52 ? 3 : 0", "if": "header_size > 40" },
+      { "name": "rest", "type": "bytes", "length": "header_size - (pos() - start())", "if": "header_size > 56" }
+    ],
+    "Rgbq": { "label": "'#' + hex(red * 65536 + green * 256 + blue)", "fields": [ { "name": "blue", "type": "u8" }, { "name": "green", "type": "u8" }, { "name": "red", "type": "u8" }, { "name": "reserved", "type": "u8" } ] }
+  }
+}

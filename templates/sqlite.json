@@ -1,0 +1,37 @@
+{
+  "id": "sqlite", "name": "SQLite database header", "extensions": ["sqlite", "sqlite3", "db", "db3"],
+  "match": [[{ "offset": 0, "text": "SQLite format 3" }]],
+  "endian": "big",
+  "structs": {
+    "File": [
+      { "name": "header", "type": "Header" },
+      { "name": "page1_btree", "type": "BtreeHeader" },
+      { "name": "cell_pointers", "type": "u16", "format": "hex", "count": "min(page1_btree.cell_count, 10000)" }
+    ],
+    "Header": [
+      { "name": "magic", "type": "char", "length": 16 },
+      { "name": "page_size", "type": "u16", "comment": "1 means 65536" },
+      { "name": "page_size_bytes", "value": "page_size == 1 ? 65536 : page_size" },
+      { "name": "write_version", "type": "u8", "enum": { "1": "Legacy (rollback journal)", "2": "WAL" } },
+      { "name": "read_version", "type": "u8", "enum": { "1": "Legacy (rollback journal)", "2": "WAL" } },
+      { "name": "reserved_per_page", "type": "u8" },
+      { "name": "max_payload_fraction", "type": "u8", "expect": 64 }, { "name": "min_payload_fraction", "type": "u8", "expect": 32 }, { "name": "leaf_payload_fraction", "type": "u8", "expect": 32 },
+      { "name": "change_counter", "type": "u32" },
+      { "name": "page_count", "type": "u32" },
+      { "name": "database_size", "value": "page_count * (page_size == 1 ? 65536 : page_size)" },
+      { "name": "first_freelist_trunk", "type": "u32" }, { "name": "freelist_pages", "type": "u32" },
+      { "name": "schema_cookie", "type": "u32" }, { "name": "schema_format", "type": "u32" },
+      { "name": "default_cache_size", "type": "u32" }, { "name": "largest_root_page", "type": "u32", "comment": "Not 0 in auto-vacuum mode" },
+      { "name": "text_encoding", "type": "u32", "enum": { "1": "UTF-8", "2": "UTF-16le", "3": "UTF-16be" } },
+      { "name": "user_version", "type": "u32" }, { "name": "incremental_vacuum", "type": "u32" }, { "name": "application_id", "type": "u32", "format": "hex" },
+      { "name": "reserved", "type": "bytes", "length": 20 },
+      { "name": "version_valid_for", "type": "u32" }, { "name": "sqlite_version", "type": "u32", "comment": "For example 3045001 is 3.45.1" }
+    ],
+    "BtreeHeader": [
+      { "name": "page_type", "type": "u8", "enum": { "2": "Interior index", "5": "Interior table", "10": "Leaf index", "13": "Leaf table" } },
+      { "name": "first_freeblock", "type": "u16", "format": "hex" }, { "name": "cell_count", "type": "u16" },
+      { "name": "cell_content_start", "type": "u16", "format": "hex" }, { "name": "fragmented_bytes", "type": "u8" },
+      { "name": "right_most_pointer", "type": "u32", "if": "page_type == 2 || page_type == 5" }
+    ]
+  }
+}

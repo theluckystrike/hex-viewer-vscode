@@ -1,0 +1,29 @@
+{
+  "id": "gif", "name": "GIF image", "extensions": ["gif"],
+  "match": [[{ "offset": 0, "text": "GIF87a" }], [{ "offset": 0, "text": "GIF89a" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "signature", "type": "char", "length": 6 },
+      { "name": "width", "type": "u16" }, { "name": "height", "type": "u16" },
+      { "name": "packed", "type": "u8", "format": "hex", "comment": "Bit 7: global color table, bits 0-2: its size" },
+      { "name": "background_color", "type": "u8" }, { "name": "aspect_ratio", "type": "u8" },
+      { "name": "global_color_table", "type": "bytes", "length": "3 * (1 << ((packed & 7) + 1))", "if": "packed & 0x80" },
+      { "name": "blocks", "type": "Block", "until": "_.introducer == 0x3B || pos() >= size()" }
+    ],
+    "Block": { "label": "introducer == 0x2C ? 'Image' : introducer == 0x3B ? 'Trailer' : 'Extension ' + hex(label_)", "fields": [
+      { "name": "introducer", "type": "u8", "enum": { "0x21": "Extension", "0x2C": "Image descriptor", "0x3B": "Trailer" } },
+      { "name": "label_", "type": "u8", "if": "introducer == 0x21", "enum": { "0xF9": "Graphic control", "0xFE": "Comment", "0xFF": "Application", "0x01": "Plain text" } },
+      { "name": "image", "type": "Image", "if": "introducer == 0x2C" },
+      { "name": "sub_blocks", "type": "SubBlock", "until": "_.size_ == 0", "if": "introducer == 0x21" }
+    ] },
+    "Image": [
+      { "name": "left", "type": "u16" }, { "name": "top", "type": "u16" }, { "name": "width", "type": "u16" }, { "name": "height", "type": "u16" },
+      { "name": "packed", "type": "u8", "format": "hex", "comment": "Bit 7: local color table, bit 6: interlaced, bits 0-2: table size" },
+      { "name": "local_color_table", "type": "bytes", "length": "3 * (1 << ((packed & 7) + 1))", "if": "packed & 0x80" },
+      { "name": "lzw_min_code_size", "type": "u8" },
+      { "name": "data", "type": "SubBlock", "until": "_.size_ == 0" }
+    ],
+    "SubBlock": [ { "name": "size_", "type": "u8" }, { "name": "data", "type": "bytes", "length": "size_", "if": "size_ > 0" } ]
+  }
+}

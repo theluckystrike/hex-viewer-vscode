@@ -1,0 +1,22 @@
+{
+  "id": "pcap", "name": "PCAP network capture (tcpdump, Wireshark)", "extensions": ["pcap", "cap", "dmp"],
+  "match": [[{ "offset": 0, "hex": "D4 C3 B2 A1" }], [{ "offset": 0, "hex": "A1 B2 C3 D4" }], [{ "offset": 0, "hex": "4D 3C B2 A1" }], [{ "offset": 0, "hex": "A1 B2 3C 4D" }]],
+  "endian": "big",
+  "structs": {
+    "File": [
+      { "name": "magic", "type": "u32", "format": "hex", "enum": { "0xA1B2C3D4": "Microseconds, big-endian", "0xD4C3B2A1": "Microseconds, little-endian", "0xA1B23C4D": "Nanoseconds, big-endian", "0x4D3CB2A1": "Nanoseconds, little-endian" } },
+      { "name": "capture", "type": "Capture" }
+    ],
+    "Capture": { "endian": "magic == 0xD4C3B2A1 || magic == 0x4D3CB2A1 ? 'little' : 'big'", "fields": [
+      { "name": "version_major", "type": "u16" }, { "name": "version_minor", "type": "u16" },
+      { "name": "thiszone", "type": "i32" }, { "name": "sigfigs", "type": "u32" }, { "name": "snaplen", "type": "u32" },
+      { "name": "link_type", "type": "u32", "enum": { "0": "BSD loopback", "1": "Ethernet", "101": "Raw IP", "105": "802.11", "113": "Linux cooked (SLL)", "127": "802.11 radiotap", "228": "IPv4", "229": "IPv6", "276": "Linux cooked v2" } },
+      { "name": "packets", "type": "Packet", "until": "eof" }
+    ] },
+    "Packet": { "label": "incl_len + ' bytes'", "fields": [
+      { "name": "ts_sec", "type": "u32", "format": "unix" }, { "name": "ts_frac", "type": "u32", "comment": "Microseconds or nanoseconds (see magic)" },
+      { "name": "incl_len", "type": "u32" }, { "name": "orig_len", "type": "u32" },
+      { "name": "data", "type": "bytes", "length": "incl_len" }
+    ] }
+  }
+}

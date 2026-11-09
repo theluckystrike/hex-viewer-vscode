@@ -1,0 +1,22 @@
+{
+  "id": "gzip", "name": "GZIP compressed file", "extensions": ["gz", "tgz", "gzip"],
+  "match": [[{ "offset": 0, "hex": "1F 8B" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "magic", "type": "bytes", "length": 2, "expect": "1F 8B" },
+      { "name": "method", "type": "u8", "enum": { "8": "Deflate" } },
+      { "name": "flags", "type": "u8", "flags": { "0x1": "FTEXT", "0x2": "FHCRC", "0x4": "FEXTRA", "0x8": "FNAME", "0x10": "FCOMMENT" } },
+      { "name": "mtime", "type": "u32", "format": "unix" },
+      { "name": "extra_flags", "type": "u8", "enum": { "0": "Default", "2": "Best compression", "4": "Fastest" } },
+      { "name": "os", "type": "u8", "enum": { "0": "FAT", "3": "Unix", "7": "Macintosh", "10": "NTFS", "11": "Windows", "255": "Unknown" } },
+      { "name": "extra_length", "type": "u16", "if": "flags & 4" }, { "name": "extra", "type": "bytes", "length": "extra_length", "if": "flags & 4" },
+      { "name": "file_name", "type": "zstring", "encoding": "latin1", "if": "flags & 8" },
+      { "name": "comment", "type": "zstring", "encoding": "latin1", "if": "flags & 16" },
+      { "name": "header_crc16", "type": "u16", "format": "hex", "if": "flags & 2" },
+      { "name": "deflate_data", "type": "bytes", "length": "size() - pos() - 8" },
+      { "name": "crc32", "type": "u32", "format": "hex" },
+      { "name": "uncompressed_size_mod_2_32", "type": "u32" }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "webp", "name": "WebP image", "extensions": ["webp"],
+  "match": [[{ "offset": 0, "text": "RIFF" }, { "offset": 8, "text": "WEBP" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "riff", "type": "char", "length": 4 }, { "name": "riff_size", "type": "u32", "comment": "File size minus 8" }, { "name": "form", "type": "char", "length": 4 },
+      { "name": "chunks", "type": "Chunk", "until": "eof" }
+    ],
+    "Chunk": { "label": "fourcc", "fields": [
+      { "name": "fourcc", "type": "char", "length": 4 }, { "name": "size_", "type": "u32" },
+      { "name": "data", "size": "size_", "type": { "switch": "fourcc", "cases": { "VP8X": "VP8X", "VP8 ": "VP8", "ANIM": "ANIM" }, "default": "Raw" } },
+      { "align": 2 }
+    ] },
+    "Raw": [ { "name": "bytes", "type": "bytes", "length": "end() - pos()" } ],
+    "VP8X": [ { "name": "flags", "type": "u8", "flags": { "0x2": "Animation", "0x4": "XMP", "0x8": "Exif", "0x10": "Alpha", "0x20": "ICC profile" } }, { "name": "reserved", "type": "u24" }, { "name": "canvas_width_minus_1", "type": "u24" }, { "name": "canvas_height_minus_1", "type": "u24" } ],
+    "VP8": [ { "name": "frame_tag", "type": "u24", "format": "hex" }, { "name": "start_code", "type": "bytes", "length": 3, "expect": "9D 01 2A" }, { "name": "width", "type": "u16", "comment": "Low 14 bits: width, high 2 bits: scale" }, { "name": "height", "type": "u16" }, { "name": "bitstream", "type": "bytes", "length": "end() - pos()" } ],
+    "ANIM": [ { "name": "background_bgra", "type": "u32", "format": "hex" }, { "name": "loop_count", "type": "u16" } ]
+  }
+}

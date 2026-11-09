@@ -1,0 +1,33 @@
+{
+  "id": "pdf", "name": "PDF header, xref table and trailer", "extensions": ["pdf"],
+  "match": [[{ "offset": 0, "text": "%PDF-" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "header", "type": "line", "length": 64, "encoding": "latin1" },
+      { "name": "startxref", "type": "StartXref", "at": { "findText": "startxref", "from": "end", "within": 4096 }, "peek": true },
+      { "name": "xref", "type": "Xref", "at": "startxref.offset", "peek": true, "if": "startxref.offset < size()" }
+    ],
+    "StartXref": [ { "name": "keyword", "type": "char", "length": 9 }, { "name": "offset", "type": "asciiint", "format": "hex" } ],
+    "Xref": [
+      { "name": "keyword", "type": "char", "length": 4 },
+      { "name": "note", "value": "'This is an xref stream (PDF 1.5 and later): the table is compressed inside an object'", "if": "keyword != 'xref'" },
+      { "name": "subsections", "type": "Subsection", "if": "keyword == 'xref'", "count": 10000, "while": "u8(pos()) == 10 || u8(pos()) == 13 || u8(pos()) == 32 ? (u8(pos() + 1) >= 48 && u8(pos() + 1) <= 57) || (u8(pos() + 2) >= 48 && u8(pos() + 2) <= 57) : u8(pos()) >= 48 && u8(pos()) <= 57" },
+      { "skipWhitespace": true },
+      { "name": "trailer", "type": "char", "length": 7, "if": "keyword == 'xref'" },
+      { "name": "trailer_dictionary", "type": "line", "length": 2048, "encoding": "latin1", "if": "keyword == 'xref'" }
+    ],
+    "Subsection": { "label": "'objects ' + first + ' to ' + (first + count - 1)", "fields": [
+      { "name": "first", "type": "asciiint" }, { "name": "count", "type": "asciiint" },
+      { "skipWhitespace": true },
+      { "name": "entries", "type": "Entry", "count": "count" }
+    ] },
+    "Entry": { "label": "'object ' + (parent.first + i) + (kind == 'n' ? ' at ' + hex(offset) : ' free')", "fields": [
+      { "name": "offset", "type": "asciiint", "comment": "Byte offset of the object (in use) or the next free object number (free)" },
+      { "name": "generation", "type": "asciiint" },
+      { "skipWhitespace": true },
+      { "name": "kind", "type": "char", "length": 1, "enum": { "n": "in use", "f": "free" } },
+      { "seek": "start() + 20" }
+    ] }
+  }
+}

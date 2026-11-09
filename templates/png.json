@@ -1,0 +1,245 @@
+{
+ "id": "png",
+ "name": "PNG image",
+ "extensions": [
+  "png",
+  "apng"
+ ],
+ "match": [
+  [
+   {
+    "offset": 0,
+    "hex": "89 50 4E 47 0D 0A 1A 0A"
+   }
+  ]
+ ],
+ "endian": "big",
+ "structs": {
+  "File": [
+   {
+    "name": "signature",
+    "type": "bytes",
+    "length": 8,
+    "expect": "89 50 4E 47 0D 0A 1A 0A"
+   },
+   {
+    "name": "chunks",
+    "type": "Chunk",
+    "until": "_.type == 'IEND' || pos() >= size()"
+   }
+  ],
+  "Chunk": {
+   "label": "type",
+   "fields": [
+    {
+     "name": "length",
+     "type": "u32"
+    },
+    {
+     "name": "type",
+     "type": "char",
+     "length": 4
+    },
+    {
+     "name": "data",
+     "type": {
+      "switch": "type",
+      "cases": {
+       "IHDR": "IHDR",
+       "pHYs": "PHYS",
+       "tEXt": "TEXT",
+       "tIME": "TIME",
+       "gAMA": "GAMA",
+       "acTL": "ACTL",
+       "fcTL": "FCTL"
+      },
+      "default": "Raw"
+     },
+     "size": "length"
+    },
+    {
+     "name": "crc",
+     "type": "u32",
+     "format": "hex"
+    }
+   ]
+  },
+  "Raw": [
+   {
+    "name": "bytes",
+    "type": "bytes",
+    "length": "end() - pos()"
+   }
+  ],
+  "IHDR": {
+   "fields": [
+    {
+     "name": "width",
+     "type": "u32"
+    },
+    {
+     "name": "height",
+     "type": "u32"
+    },
+    {
+     "name": "bit_depth",
+     "type": "u8"
+    },
+    {
+     "name": "color_type",
+     "type": "u8",
+     "enum": "ColorType"
+    },
+    {
+     "name": "compression",
+     "type": "u8"
+    },
+    {
+     "name": "filter",
+     "type": "u8"
+    },
+    {
+     "name": "interlace",
+     "type": "u8",
+     "enum": {
+      "0": "None",
+      "1": "Adam7"
+     }
+    }
+   ]
+  },
+  "PHYS": {
+   "fields": [
+    {
+     "name": "pixels_per_unit_x",
+     "type": "u32"
+    },
+    {
+     "name": "pixels_per_unit_y",
+     "type": "u32"
+    },
+    {
+     "name": "unit",
+     "type": "u8",
+     "enum": {
+      "0": "Unknown",
+      "1": "Metre"
+     }
+    }
+   ]
+  },
+  "TEXT": {
+   "fields": [
+    {
+     "name": "keyword",
+     "type": "zstring",
+     "length": 80,
+     "encoding": "latin1"
+    },
+    {
+     "name": "text",
+     "type": "string",
+     "length": "end() - pos()",
+     "encoding": "latin1"
+    }
+   ]
+  },
+  "TIME": {
+   "fields": [
+    {
+     "name": "year",
+     "type": "u16"
+    },
+    {
+     "name": "month",
+     "type": "u8"
+    },
+    {
+     "name": "day",
+     "type": "u8"
+    },
+    {
+     "name": "hour",
+     "type": "u8"
+    },
+    {
+     "name": "minute",
+     "type": "u8"
+    },
+    {
+     "name": "second",
+     "type": "u8"
+    }
+   ]
+  },
+  "GAMA": {
+   "fields": [
+    {
+     "name": "gamma_x100000",
+     "type": "u32"
+    }
+   ]
+  },
+  "ACTL": {
+   "fields": [
+    {
+     "name": "num_frames",
+     "type": "u32"
+    },
+    {
+     "name": "num_plays",
+     "type": "u32"
+    }
+   ]
+  },
+  "FCTL": {
+   "fields": [
+    {
+     "name": "sequence",
+     "type": "u32"
+    },
+    {
+     "name": "width",
+     "type": "u32"
+    },
+    {
+     "name": "height",
+     "type": "u32"
+    },
+    {
+     "name": "x_offset",
+     "type": "u32"
+    },
+    {
+     "name": "y_offset",
+     "type": "u32"
+    },
+    {
+     "name": "delay_num",
+     "type": "u16"
+    },
+    {
+     "name": "delay_den",
+     "type": "u16"
+    },
+    {
+     "name": "dispose_op",
+     "type": "u8"
+    },
+    {
+     "name": "blend_op",
+     "type": "u8"
+    }
+   ]
+  }
+ },
+ "enums": {
+  "ColorType": {
+   "0": "Grayscale",
+   "2": "RGB",
+   "3": "Palette",
+   "4": "Grayscale + alpha",
+   "6": "RGBA"
+  }
+ }
+}

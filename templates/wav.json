@@ -1,0 +1,30 @@
+{
+  "id": "wav", "name": "WAV audio (RIFF WAVE)", "extensions": ["wav", "wave"],
+  "match": [[{ "offset": 0, "text": "RIFF" }, { "offset": 8, "text": "WAVE" }], [{ "offset": 0, "text": "RF64" }, { "offset": 8, "text": "WAVE" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "riff", "type": "char", "length": 4 }, { "name": "riff_size", "type": "u32", "comment": "File size minus 8" }, { "name": "form", "type": "char", "length": 4 },
+      { "name": "chunks", "type": "Chunk", "until": "eof" }
+    ],
+    "Chunk": { "label": "id", "fields": [
+      { "name": "id", "type": "char", "length": 4 }, { "name": "size_", "type": "u32" },
+      { "name": "data", "size": "min(size_, size() - pos())", "type": { "switch": "id", "cases": { "fmt ": "Fmt", "LIST": "List", "fact": "Fact" }, "default": "Raw" } },
+      { "align": 2 }
+    ] },
+    "Raw": [ { "name": "bytes", "type": "bytes", "length": "end() - pos()" } ],
+    "Fmt": [
+      { "name": "audio_format", "type": "u16", "enum": { "1": "PCM", "3": "IEEE float", "6": "A-law", "7": "mu-law", "0x11": "IMA ADPCM", "0x55": "MP3", "0xFFFE": "Extensible" } },
+      { "name": "channels", "type": "u16" }, { "name": "sample_rate", "type": "u32" }, { "name": "byte_rate", "type": "u32" },
+      { "name": "block_align", "type": "u16" }, { "name": "bits_per_sample", "type": "u16" },
+      { "name": "extra_size", "type": "u16", "if": "end() - pos() >= 2" },
+      { "name": "valid_bits", "type": "u16", "if": "audio_format == 0xFFFE && end() - pos() >= 2" },
+      { "name": "channel_mask", "type": "u32", "format": "hex", "if": "audio_format == 0xFFFE && end() - pos() >= 4" },
+      { "name": "sub_format", "type": "bytes", "length": 16, "if": "audio_format == 0xFFFE && end() - pos() >= 16" },
+      { "name": "rest", "type": "bytes", "length": "end() - pos()", "if": "end() > pos()" }
+    ],
+    "Fact": [ { "name": "sample_count", "type": "u32" } ],
+    "List": [ { "name": "list_type", "type": "char", "length": 4 }, { "name": "items", "type": "Info", "until": "eof" } ],
+    "Info": { "label": "id", "fields": [ { "name": "id", "type": "char", "length": 4 }, { "name": "size_", "type": "u32" }, { "name": "text", "type": "char", "length": "min(size_, end() - pos())" }, { "align": 2 } ] }
+  }
+}

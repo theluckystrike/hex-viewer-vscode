@@ -1,0 +1,45 @@
+{
+  "id": "zip", "name": "ZIP archive (also JAR, APK, DOCX, XLSX, PPTX, EPUB)", "extensions": ["zip", "jar", "apk", "docx", "xlsx", "pptx", "epub", "odt", "ods", "whl", "nupkg", "vsix", "aar", "ipa"],
+  "match": [[{ "offset": 0, "hex": "50 4B 03 04" }], [{ "offset": 0, "hex": "50 4B 05 06" }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "end_of_central_directory", "type": "Eocd", "at": { "find": "50 4B 05 06", "from": "end", "within": 65557 }, "peek": true },
+      { "name": "zip64_note", "value": "'ZIP64: the real offsets are in the ZIP64 end record before this one'", "if": "end_of_central_directory.cd_offset == 0xFFFFFFFF || end_of_central_directory.total_entries == 0xFFFF" },
+      { "name": "central_directory", "type": "CentralEntry", "count": "end_of_central_directory.total_entries", "at": "end_of_central_directory.cd_offset", "peek": true, "if": "end_of_central_directory.cd_offset < size()" },
+      { "name": "local_files", "type": "LocalFile", "count": "len(central_directory)", "elementAt": "central_directory[i].local_offset", "if": "defined(central_directory)" }
+    ],
+    "Eocd": [
+      { "name": "signature", "type": "u32", "format": "hex", "expect": 101010256 },
+      { "name": "disk", "type": "u16" }, { "name": "cd_disk", "type": "u16" },
+      { "name": "entries_on_disk", "type": "u16" }, { "name": "total_entries", "type": "u16" },
+      { "name": "cd_size", "type": "u32" }, { "name": "cd_offset", "type": "u32", "format": "hex" },
+      { "name": "comment_length", "type": "u16" }, { "name": "comment", "type": "string", "length": "comment_length" }
+    ],
+    "CentralEntry": { "label": "name", "fields": [
+      { "name": "signature", "type": "u32", "format": "hex", "expect": 33639248 },
+      { "name": "version_made_by", "type": "u16" }, { "name": "version_needed", "type": "u16" },
+      { "name": "flags", "type": "u16", "flags": "GpFlags" }, { "name": "method", "type": "u16", "enum": "Method" },
+      { "name": "mod_time", "type": "u16", "format": "dostime" }, { "name": "mod_date", "type": "u16", "format": "dosdate" },
+      { "name": "crc32", "type": "u32", "format": "hex" }, { "name": "compressed_size", "type": "u32" }, { "name": "uncompressed_size", "type": "u32" },
+      { "name": "name_length", "type": "u16" }, { "name": "extra_length", "type": "u16" }, { "name": "comment_length", "type": "u16" },
+      { "name": "disk_start", "type": "u16" }, { "name": "internal_attributes", "type": "u16", "format": "hex" }, { "name": "external_attributes", "type": "u32", "format": "hex" },
+      { "name": "local_offset", "type": "u32", "format": "hex" },
+      { "name": "name", "type": "string", "length": "name_length" },
+      { "name": "extra", "type": "bytes", "length": "extra_length" },
+      { "name": "comment", "type": "string", "length": "comment_length" }
+    ] },
+    "LocalFile": { "label": "name", "fields": [
+      { "name": "signature", "type": "u32", "format": "hex", "expect": 67324752 },
+      { "name": "version_needed", "type": "u16" }, { "name": "flags", "type": "u16", "flags": "GpFlags" }, { "name": "method", "type": "u16", "enum": "Method" },
+      { "name": "mod_time", "type": "u16", "format": "dostime" }, { "name": "mod_date", "type": "u16", "format": "dosdate" },
+      { "name": "crc32", "type": "u32", "format": "hex" }, { "name": "compressed_size", "type": "u32" }, { "name": "uncompressed_size", "type": "u32" },
+      { "name": "name_length", "type": "u16" }, { "name": "extra_length", "type": "u16" },
+      { "name": "name", "type": "string", "length": "name_length" },
+      { "name": "extra", "type": "bytes", "length": "extra_length" },
+      { "name": "data", "type": "bytes", "length": "compressed_size == 0xFFFFFFFF || (flags & 8 && compressed_size == 0) ? central_directory[i].compressed_size : compressed_size", "comment": "Compressed file data" }
+    ] }
+  },
+  "enums": { "Method": { "0": "Stored", "8": "Deflate", "9": "Deflate64", "12": "BZIP2", "14": "LZMA", "93": "Zstandard", "95": "XZ", "99": "AES encrypted" } },
+  "flags": { "GpFlags": { "0x1": "Encrypted", "0x8": "Data descriptor", "0x800": "UTF-8 names" } }
+}

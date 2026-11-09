@@ -1,0 +1,56 @@
+{
+  "id": "mp4", "name": "MP4 / MOV / M4A / HEIC (ISO base media boxes)", "extensions": ["mp4", "m4a", "m4v", "mov", "3gp", "heic", "heif", "avif", "m4b"],
+  "match": [[{ "offset": 4, "text": "ftyp" }], [{ "offset": 4, "text": "moov" }], [{ "offset": 4, "text": "wide" }], [{ "offset": 4, "text": "mdat" }]],
+  "endian": "big",
+  "structs": {
+    "File": [ { "name": "boxes", "type": "Box", "until": "eof" } ],
+    "Box": { "label": "type", "fields": [
+      { "name": "size_", "type": "u32", "comment": "1: a 64-bit size follows. 0: the box runs to the end of the file" },
+      { "name": "type", "type": "char", "length": 4 },
+      { "name": "large_size", "type": "u64", "if": "size_ == 1" },
+      { "name": "box_size", "value": "size_ == 1 ? large_size : size_ == 0 ? end() - start() : size_", "hidden": true },
+      { "name": "payload", "size": "max(0, min(box_size - (pos() - parent.offset), end() - pos()))", "type": { "switch": "type", "cases": {
+        "moov": "Container", "trak": "Container", "mdia": "Container", "minf": "Container", "stbl": "Container", "edts": "Container", "udta": "Container", "dinf": "Container", "mvex": "Container", "moof": "Container", "traf": "Container", "mfra": "Container", "ilst": "Container",
+        "meta": "Meta", "ftyp": "Ftyp", "styp": "Ftyp", "mvhd": "Mvhd", "tkhd": "Tkhd", "mdhd": "Mdhd", "hdlr": "Hdlr", "stsd": "Stsd", "stco": "Stco", "co64": "Co64", "stsz": "Stsz", "stts": "Stts" }, "default": "Raw" } }
+    ] },
+    "Raw": [ { "name": "bytes", "type": "bytes", "length": "end() - pos()" } ],
+    "Container": [ { "name": "boxes", "type": "Box", "until": "eof" } ],
+    "Meta": [ { "name": "version_flags", "type": "u32", "format": "hex", "if": "u32be(pos() + 4) != 0x68646C72" }, { "name": "boxes", "type": "Box", "until": "eof" } ],
+    "Ftyp": [ { "name": "major_brand", "type": "char", "length": 4 }, { "name": "minor_version", "type": "u32" }, { "name": "compatible_brands", "type": "char", "length": 4, "count": "(end() - pos()) // 4" } ],
+    "Mvhd": [
+      { "name": "version", "type": "u8" }, { "name": "flags", "type": "u24", "format": "hex" },
+      { "name": "creation_time", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" }, "comment": "Seconds since 1904-01-01" },
+      { "name": "modification_time", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "timescale", "type": "u32" },
+      { "name": "duration", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "duration_seconds", "value": "timescale ? duration / timescale : 0" },
+      { "name": "rate", "type": "u32", "format": "hex", "comment": "16.16 fixed point; 0x00010000 is 1.0" }, { "name": "volume", "type": "u16", "format": "hex" },
+      { "name": "rest", "type": "bytes", "length": "end() - pos()" }
+    ],
+    "Tkhd": [
+      { "name": "version", "type": "u8" }, { "name": "flags", "type": "u24", "flags": { "0x1": "Enabled", "0x2": "In movie", "0x4": "In preview" } },
+      { "name": "creation_time", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "modification_time", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "track_id", "type": "u32" }, { "name": "reserved", "type": "u32" },
+      { "name": "duration", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "reserved2", "type": "bytes", "length": 8 }, { "name": "layer", "type": "i16" }, { "name": "alternate_group", "type": "i16" }, { "name": "volume", "type": "u16", "format": "hex" }, { "name": "reserved3", "type": "u16" },
+      { "name": "matrix", "type": "bytes", "length": 36 },
+      { "name": "width_16_16", "type": "u32" }, { "name": "height_16_16", "type": "u32" },
+      { "name": "width", "value": "width_16_16 >> 16" }, { "name": "height", "value": "height_16_16 >> 16" }
+    ],
+    "Mdhd": [
+      { "name": "version", "type": "u8" }, { "name": "flags", "type": "u24", "format": "hex" },
+      { "name": "creation_time", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "modification_time", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "timescale", "type": "u32" },
+      { "name": "duration", "type": { "switch": "version", "cases": { "1": "u64" }, "default": "u32" } },
+      { "name": "language", "type": "u16", "format": "hex", "comment": "Packed ISO-639-2 code" }, { "name": "pre_defined", "type": "u16" }
+    ],
+    "Hdlr": [ { "name": "version_flags", "type": "u32", "format": "hex" }, { "name": "pre_defined", "type": "u32" }, { "name": "handler_type", "type": "char", "length": 4 }, { "name": "reserved", "type": "bytes", "length": 12 }, { "name": "name", "type": "zstring", "length": "end() - pos()" } ],
+    "Stsd": [ { "name": "version_flags", "type": "u32", "format": "hex" }, { "name": "entry_count", "type": "u32" }, { "name": "entries", "type": "Box", "count": "entry_count", "while": "pos() + 8 <= end()" } ],
+    "Stco": [ { "name": "version_flags", "type": "u32", "format": "hex" }, { "name": "entry_count", "type": "u32" }, { "name": "chunk_offsets", "type": "u32", "format": "hex", "count": "min(entry_count, (end() - pos()) // 4)" } ],
+    "Co64": [ { "name": "version_flags", "type": "u32", "format": "hex" }, { "name": "entry_count", "type": "u32" }, { "name": "chunk_offsets", "type": "u64", "format": "hex", "count": "min(entry_count, (end() - pos()) // 8)" } ],
+    "Stsz": [ { "name": "version_flags", "type": "u32", "format": "hex" }, { "name": "sample_size", "type": "u32" }, { "name": "sample_count", "type": "u32" }, { "name": "sizes", "type": "u32", "count": "min(sample_count, (end() - pos()) // 4)", "if": "sample_size == 0" } ],
+    "Stts": [ { "name": "version_flags", "type": "u32", "format": "hex" }, { "name": "entry_count", "type": "u32" }, { "name": "entries", "type": [ { "name": "sample_count", "type": "u32" }, { "name": "sample_delta", "type": "u32" } ], "count": "min(entry_count, (end() - pos()) // 8)" } ]
+  }
+}

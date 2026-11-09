@@ -1,0 +1,27 @@
+{
+  "id": "tar", "name": "TAR archive (ustar)", "extensions": ["tar"],
+  "match": [[{ "offset": 257, "text": "ustar" }]],
+  "endian": "little",
+  "structs": {
+    "File": [ { "name": "entries", "type": "Entry", "while": "pos() + 512 <= size() && u8(pos()) != 0", "count": 1000000 } ],
+    "Entry": { "label": "header.name", "fields": [
+      { "name": "header", "type": "Header", "size": 512 },
+      { "name": "data", "type": "bytes", "length": "min(oct(header.size_), size() - pos())" },
+      { "align": 512 }
+    ] },
+    "Header": [
+      { "name": "name", "type": "char", "length": 100 }, { "name": "mode", "type": "char", "length": 8 },
+      { "name": "uid", "type": "char", "length": 8 }, { "name": "gid", "type": "char", "length": 8 },
+      { "name": "size_", "type": "char", "length": 12, "comment": "Octal" },
+      { "name": "size_bytes", "value": "oct(size_)" },
+      { "name": "mtime", "type": "char", "length": 12, "comment": "Octal seconds since 1970" },
+      { "name": "checksum", "type": "char", "length": 8 },
+      { "name": "typeflag", "type": "u8", "format": "char", "enum": { "0x30": "Regular file", "0x00": "Regular file (old)", "0x31": "Hard link", "0x32": "Symbolic link", "0x35": "Directory", "0x78": "PAX header", "0x67": "PAX global header", "0x4C": "GNU long name" } },
+      { "name": "linkname", "type": "char", "length": 100 },
+      { "name": "magic", "type": "char", "length": 6 }, { "name": "version", "type": "char", "length": 2 },
+      { "name": "uname", "type": "char", "length": 32 }, { "name": "gname", "type": "char", "length": 32 },
+      { "name": "devmajor", "type": "char", "length": 8 }, { "name": "devminor", "type": "char", "length": 8 },
+      { "name": "prefix", "type": "char", "length": 155 }
+    ]
+  }
+}

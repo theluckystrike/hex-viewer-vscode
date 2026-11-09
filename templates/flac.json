@@ -1,0 +1,43 @@
+{
+  "id": "flac", "name": "FLAC audio", "extensions": ["flac"],
+  "match": [[{ "offset": 0, "text": "fLaC" }]],
+  "endian": "big",
+  "structs": {
+    "File": [
+      { "name": "marker", "type": "char", "length": 4 },
+      { "name": "metadata", "type": "Block", "until": "_.header & 0x80" },
+      { "name": "audio_frames", "type": "bytes", "length": "size() - pos()" }
+    ],
+    "Block": { "label": "kind", "fields": [
+      { "name": "header", "type": "u8", "format": "hex", "comment": "Bit 7: last block, bits 0-6: block type" },
+      { "name": "kind", "value": "(header & 0x7F) == 0 ? 'STREAMINFO' : (header & 0x7F) == 1 ? 'PADDING' : (header & 0x7F) == 2 ? 'APPLICATION' : (header & 0x7F) == 3 ? 'SEEKTABLE' : (header & 0x7F) == 4 ? 'VORBIS_COMMENT' : (header & 0x7F) == 5 ? 'CUESHEET' : (header & 0x7F) == 6 ? 'PICTURE' : 'type ' + (header & 0x7F)" },
+      { "name": "length", "type": "u24" },
+      { "name": "data", "size": "length", "type": { "switch": "header & 0x7F", "cases": { "0": "StreamInfo", "4": "VorbisComment", "6": "Picture", "3": "SeekTable" }, "default": "Raw" } }
+    ] },
+    "Raw": [ { "name": "bytes", "type": "bytes", "length": "end() - pos()" } ],
+    "StreamInfo": [
+      { "name": "min_block_size", "type": "u16" }, { "name": "max_block_size", "type": "u16" },
+      { "name": "min_frame_size", "type": "u24" }, { "name": "max_frame_size", "type": "u24" },
+      { "name": "packed", "type": "u64", "format": "hex", "comment": "20 bits sample rate, 3 bits channels - 1, 5 bits bits per sample - 1, 36 bits total samples" },
+      { "name": "sample_rate", "value": "packed >> 44" },
+      { "name": "channels", "value": "((packed >> 41) & 7) + 1" },
+      { "name": "bits_per_sample", "value": "((packed >> 36) & 31) + 1" },
+      { "name": "total_samples", "value": "packed & 0xFFFFFFFFF" },
+      { "name": "md5", "type": "bytes", "length": 16 }
+    ],
+    "SeekTable": [ { "name": "points", "type": [ { "name": "sample", "type": "u64" }, { "name": "offset", "type": "u64", "format": "hex" }, { "name": "samples", "type": "u16" } ], "count": "(end() - pos()) // 18" } ],
+    "VorbisComment": { "endian": "little", "fields": [
+      { "name": "vendor_length", "type": "u32" }, { "name": "vendor", "type": "string", "length": "vendor_length" },
+      { "name": "count", "type": "u32" },
+      { "name": "comments", "type": "Comment", "count": "count" }
+    ] },
+    "Comment": { "label": "text", "fields": [ { "name": "length", "type": "u32" }, { "name": "text", "type": "string", "length": "length" } ] },
+    "Picture": [
+      { "name": "picture_type", "type": "u32", "enum": { "0": "Other", "3": "Front cover", "4": "Back cover", "6": "Media", "8": "Artist" } },
+      { "name": "mime_length", "type": "u32" }, { "name": "mime", "type": "string", "length": "mime_length", "encoding": "latin1" },
+      { "name": "description_length", "type": "u32" }, { "name": "description", "type": "string", "length": "description_length" },
+      { "name": "width", "type": "u32" }, { "name": "height", "type": "u32" }, { "name": "depth", "type": "u32" }, { "name": "colors", "type": "u32" },
+      { "name": "data_length", "type": "u32" }, { "name": "data", "type": "bytes", "length": "data_length" }
+    ]
+  }
+}

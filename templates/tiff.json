@@ -1,0 +1,30 @@
+{
+  "id": "tiff", "name": "TIFF image (also DNG and many camera raw files)", "extensions": ["tif", "tiff", "dng", "nef", "cr2", "arw"],
+  "match": [[{ "offset": 0, "hex": "49 49 2A 00" }], [{ "offset": 0, "hex": "4D 4D 00 2A" }]],
+  "structs": {
+    "File": [
+      { "name": "byte_order", "type": "char", "length": 2, "comment": "II: little-endian (Intel), MM: big-endian (Motorola)" },
+      { "name": "body", "type": "Body" }
+    ],
+    "Body": { "endian": "byte_order == 'II' ? 'little' : 'big'", "fields": [
+      { "name": "magic", "type": "u16", "expect": 42 },
+      { "name": "first_ifd", "type": "u32", "format": "hex" },
+      { "name": "ifds", "type": "Ifd", "count": 64, "while": "!defined(_) || (_.next_ifd != 0 && _.next_ifd < size())", "elementAt": "defined(_) ? _.next_ifd : first_ifd" }
+    ] },
+    "Ifd": { "label": "entry_count + ' entries'", "fields": [
+      { "name": "entry_count", "type": "u16" },
+      { "name": "entries", "type": "Entry", "count": "entry_count" },
+      { "name": "next_ifd", "type": "u32", "format": "hex" }
+    ] },
+    "Entry": { "label": "tag", "fields": [
+      { "name": "tag", "type": "u16", "enum": "Tag" },
+      { "name": "type", "type": "u16", "enum": { "1": "BYTE", "2": "ASCII", "3": "SHORT", "4": "LONG", "5": "RATIONAL", "6": "SBYTE", "7": "UNDEFINED", "8": "SSHORT", "9": "SLONG", "10": "SRATIONAL", "11": "FLOAT", "12": "DOUBLE", "13": "IFD" } },
+      { "name": "count", "type": "u32" },
+      { "name": "value_short", "type": "u16", "if": "type == 3 && count == 1" },
+      { "name": "pad", "type": "u16", "if": "type == 3 && count == 1" },
+      { "name": "value_or_offset", "type": "u32", "if": "!(type == 3 && count == 1)", "comment": "The value when it fits in 4 bytes, else the offset of the values" },
+      { "name": "text", "type": "zstring", "length": "count", "encoding": "latin1", "if": "type == 2 && count > 4 && value_or_offset < size()", "at": "value_or_offset", "peek": true }
+    ] }
+  },
+  "enums": { "Tag": { "254": "NewSubfileType", "256": "ImageWidth", "257": "ImageLength", "258": "BitsPerSample", "259": "Compression", "262": "PhotometricInterpretation", "270": "ImageDescription", "271": "Make", "272": "Model", "273": "StripOffsets", "274": "Orientation", "277": "SamplesPerPixel", "278": "RowsPerStrip", "279": "StripByteCounts", "282": "XResolution", "283": "YResolution", "284": "PlanarConfiguration", "296": "ResolutionUnit", "305": "Software", "306": "DateTime", "315": "Artist", "317": "Predictor", "320": "ColorMap", "322": "TileWidth", "323": "TileLength", "324": "TileOffsets", "325": "TileByteCounts", "330": "SubIFDs", "338": "ExtraSamples", "339": "SampleFormat", "513": "JPEGInterchangeFormat", "514": "JPEGInterchangeFormatLength", "530": "YCbCrSubSampling", "531": "YCbCrPositioning", "33432": "Copyright", "34665": "ExifIFD", "34853": "GPSInfo", "50706": "DNGVersion" } }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "jpeg", "name": "JPEG image", "extensions": ["jpg", "jpeg", "jfif", "jpe"],
+  "match": [[{ "offset": 0, "hex": "FF D8 FF" }]],
+  "endian": "big",
+  "structs": {
+    "File": [
+      { "name": "soi", "type": "u16", "format": "hex", "expect": 65496, "comment": "Start of image (FF D8)" },
+      { "name": "segments", "type": "Segment", "until": "_.type == 0xDA || _.type == 0xD9 || pos() >= size()" },
+      { "name": "eoi", "type": "u16", "format": "hex", "at": { "find": "FF D9", "from": "end", "within": "size()" }, "peek": true, "if": "segments[-1].type == 0xDA", "comment": "End of image (FF D9)" },
+      { "name": "scan_data", "type": "bytes", "length": "eoi.offset - pos()", "if": "segments[-1].type == 0xDA", "comment": "Entropy-coded image data after the start of scan" }
+    ],
+    "Segment": { "label": "name", "fields": [
+      { "name": "marker", "type": "u8", "format": "hex", "expect": 255 },
+      { "name": "type", "type": "u8", "enum": "Marker" },
+      { "name": "name", "value": "type == 0xC0 ? 'SOF0' : type == 0xC2 ? 'SOF2' : type == 0xC4 ? 'DHT' : type == 0xDB ? 'DQT' : type == 0xDA ? 'SOS' : type == 0xDD ? 'DRI' : type == 0xFE ? 'COM' : type >= 0xE0 && type <= 0xEF ? 'APP' + (type - 0xE0) : type >= 0xC0 && type <= 0xCF ? 'SOF' + (type - 0xC0) : hex(type)", "hidden": true },
+      { "name": "length", "type": "u16", "if": "!(type == 0x01 || (type >= 0xD0 && type <= 0xD9))", "comment": "Includes these 2 bytes" },
+      { "name": "body", "if": "defined(length)", "size": "length - 2", "type": { "switch": "type", "cases": { "0xE0": "APP0", "0xC0": "SOF", "0xC1": "SOF", "0xC2": "SOF", "0xDA": "SOS", "0xFE": "COM", "0xDD": "DRI", "0xE1": "APP1" }, "default": "Raw" } }
+    ] },
+    "Raw": [ { "name": "data", "type": "bytes", "length": "end() - pos()" } ],
+    "APP0": [
+      { "name": "identifier", "type": "zstring", "length": 5, "encoding": "latin1" },
+      { "name": "version_major", "type": "u8", "if": "identifier == 'JFIF'" }, { "name": "version_minor", "type": "u8", "if": "identifier == 'JFIF'" },
+      { "name": "units", "type": "u8", "if": "identifier == 'JFIF'", "enum": { "0": "No units (aspect ratio)", "1": "Dots per inch", "2": "Dots per cm" } },
+      { "name": "x_density", "type": "u16", "if": "identifier == 'JFIF'" }, { "name": "y_density", "type": "u16", "if": "identifier == 'JFIF'" },
+      { "name": "thumbnail_width", "type": "u8", "if": "identifier == 'JFIF'" }, { "name": "thumbnail_height", "type": "u8", "if": "identifier == 'JFIF'" },
+      { "name": "rest", "type": "bytes", "length": "end() - pos()" }
+    ],
+    "APP1": [ { "name": "identifier", "type": "zstring", "length": 30, "encoding": "latin1" }, { "name": "data", "type": "bytes", "length": "end() - pos()", "comment": "Exif (a TIFF structure) or XMP" } ],
+    "SOF": [
+      { "name": "precision", "type": "u8" }, { "name": "height", "type": "u16" }, { "name": "width", "type": "u16" },
+      { "name": "component_count", "type": "u8" },
+      { "name": "components", "type": "Component", "count": "component_count" }
+    ],
+    "Component": { "label": "'id ' + id", "fields": [ { "name": "id", "type": "u8" }, { "name": "sampling", "type": "u8", "format": "hex", "comment": "High 4 bits horizontal, low 4 bits vertical" }, { "name": "quant_table", "type": "u8" } ] },
+    "SOS": [ { "name": "component_count", "type": "u8" }, { "name": "components", "type": [ { "name": "id", "type": "u8" }, { "name": "tables", "type": "u8", "format": "hex" } ], "count": "component_count" }, { "name": "spectral_start", "type": "u8" }, { "name": "spectral_end", "type": "u8" }, { "name": "approx", "type": "u8", "format": "hex" } ],
+    "COM": [ { "name": "text", "type": "string", "length": "end() - pos()", "encoding": "latin1" } ],
+    "DRI": [ { "name": "restart_interval", "type": "u16" } ]
+  },
+  "enums": { "Marker": { "0xC0": "SOF0 baseline", "0xC1": "SOF1 extended", "0xC2": "SOF2 progressive", "0xC4": "DHT Huffman table", "0xD8": "SOI", "0xD9": "EOI", "0xDA": "SOS start of scan", "0xDB": "DQT quantization table", "0xDD": "DRI restart interval", "0xE0": "APP0 (JFIF)", "0xE1": "APP1 (Exif / XMP)", "0xE2": "APP2 (ICC profile)", "0xED": "APP13 (Photoshop)", "0xEE": "APP14 (Adobe)", "0xFE": "COM comment" } }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "ico", "name": "ICO / CUR icon", "extensions": ["ico", "cur"],
+  "match": [[{ "offset": 0, "hex": "00 00 01 00" }, { "offset": 4, "type": "u16", "min": 1, "max": 512 }], [{ "offset": 0, "hex": "00 00 02 00" }, { "offset": 4, "type": "u16", "min": 1, "max": 512 }]],
+  "endian": "little",
+  "structs": {
+    "File": [
+      { "name": "reserved", "type": "u16", "expect": 0 },
+      { "name": "type", "type": "u16", "enum": { "1": "Icon", "2": "Cursor" } },
+      { "name": "count", "type": "u16" },
+      { "name": "entries", "type": "Entry", "count": "count" },
+      { "name": "images", "type": "Image", "count": "count", "elementAt": "entries[i].offset" }
+    ],
+    "Entry": { "label": "(width ? width : 256) + 'x' + (height ? height : 256)", "fields": [
+      { "name": "width", "type": "u8", "comment": "0 means 256" }, { "name": "height", "type": "u8", "comment": "0 means 256" },
+      { "name": "palette_colors", "type": "u8" }, { "name": "reserved", "type": "u8" },
+      { "name": "planes_or_hotspot_x", "type": "u16" }, { "name": "bpp_or_hotspot_y", "type": "u16" },
+      { "name": "bytes", "type": "u32" }, { "name": "offset", "type": "u32", "format": "hex" }
+    ] },
+    "Image": { "label": "u32be(start()) == 0x89504E47 ? 'PNG' : 'BMP'", "fields": [
+      { "name": "png_signature", "type": "bytes", "length": 8, "if": "u32be(pos()) == 0x89504E47" },
+      { "name": "bmp_header_size", "type": "u32", "if": "u32be(pos()) != 0x89504E47" },
+      { "name": "width", "type": "i32", "if": "u32be(start()) != 0x89504E47" },
+      { "name": "height", "type": "i32", "if": "u32be(start()) != 0x89504E47", "comment": "Twice the icon height: the XOR image plus the AND mask" },
+      { "name": "planes", "type": "u16", "if": "u32be(start()) != 0x89504E47" },
+      { "name": "bits_per_pixel", "type": "u16", "if": "u32be(start()) != 0x89504E47" },
+      { "name": "data", "type": "bytes", "length": "entries[i].bytes - (pos() - start())" }
+    ] }
+  }
+}

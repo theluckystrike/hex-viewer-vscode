@@ -130,3 +130,5 @@ button.primary:hover { background: var(--vscode-button-hoverBackground, var(--vs
 .st { background: var(--vscode-editor-wordHighlightStrongBackground, rgba(0,73,114,.5)); opacity: 1; }
 .withpro { display: inline-flex; align-items: center; gap: 4px; }
 .sumrow { margin-top: 8px; }
+/* setting hexViewer.showProFeatures false (and no license): no Pro tab, button or badge */
+.nopro .tab[data-panel="struct"], .nopro .tab[data-panel="bm"], .nopro .sumrow, .nopro .withpro, .nopro .pro { display: none !important; }

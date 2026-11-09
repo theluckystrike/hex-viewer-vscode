@@ -225,18 +225,18 @@
       {
         "command": "hexViewer.nextBookmark",
         "key": "f2",
-        "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        "when": "activeCustomEditorId =~ /^hexViewer\\./ && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
       },
       {
         "command": "hexViewer.previousBookmark",
         "key": "shift+f2",
-        "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        "when": "activeCustomEditorId =~ /^hexViewer\\./ && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
       },
       {
         "command": "hexViewer.addBookmark",
         "key": "ctrl+f2",
         "mac": "cmd+f2",
-        "when": "activeCustomEditorId =~ /^hexViewer\\./"
+        "when": "activeCustomEditorId =~ /^hexViewer\\./ && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
       }
     ],
     "menus": {
@@ -253,7 +253,7 @@
         },
         {
           "command": "hexViewer.findInFiles",
-          "when": "explorerResourceIsFolder",
+          "when": "explorerResourceIsFolder && (config.hexViewer.showProFeatures || hexViewer.proLicensed)",
           "group": "4_search@60"
         }
       ],
@@ -302,27 +302,47 @@
         },
         {
           "command": "hexViewer.showStructure",
-          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+          "when": "(activeCustomEditorId =~ /^hexViewer\\./) && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
         },
         {
           "command": "hexViewer.chooseTemplate",
-          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+          "when": "(activeCustomEditorId =~ /^hexViewer\\./) && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
         },
         {
           "command": "hexViewer.addBookmark",
-          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+          "when": "(activeCustomEditorId =~ /^hexViewer\\./) && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
         },
         {
           "command": "hexViewer.nextBookmark",
-          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+          "when": "(activeCustomEditorId =~ /^hexViewer\\./) && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
         },
         {
           "command": "hexViewer.previousBookmark",
-          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+          "when": "(activeCustomEditorId =~ /^hexViewer\\./) && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
         },
         {
           "command": "hexViewer.checksums",
-          "when": "activeCustomEditorId =~ /^hexViewer\\./"
+          "when": "(activeCustomEditorId =~ /^hexViewer\\./) && (config.hexViewer.showProFeatures || hexViewer.proLicensed)"
+        },
+        {
+          "command": "hexViewer.findInFiles",
+          "when": "(config.hexViewer.showProFeatures || hexViewer.proLicensed)"
+        },
+        {
+          "command": "hexViewer.getPro",
+          "when": "(config.hexViewer.showProFeatures || hexViewer.proLicensed)"
+        },
+        {
+          "command": "hexViewer.unlockWithSponsors",
+          "when": "(config.hexViewer.showProFeatures || hexViewer.proLicensed)"
+        },
+        {
+          "command": "hexViewer.enterLicenseKey",
+          "when": "(config.hexViewer.showProFeatures || hexViewer.proLicensed)"
+        },
+        {
+          "command": "hexViewer.removeLicense",
+          "when": "(config.hexViewer.showProFeatures || hexViewer.proLicensed)"
         }
       ]
     },
@@ -450,6 +470,11 @@
           },
           "default": [],
           "description": "Folders with your own binary templates (JSON files) for the Structure view of Hex Viewer Pro. Absolute paths, ~ for your home folder, or paths inside the workspace. The .vscode/hex-templates folder of each workspace folder is always read. Templates are data, never code."
+        },
+        "hexViewer.showProFeatures": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Zovo Pro features (the PRO badges, the Structure and Bookmarks tabs, the Checksums and Export report buttons and the Pro commands). Turn it off to see only the free viewer. A Zovo Pro license always shows them."
         }
       }
     },

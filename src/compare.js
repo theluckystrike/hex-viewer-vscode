@@ -87,7 +87,7 @@ async function openCompare(context, uri, uris, activeUri) {
     try {
       if (m.type === 'ready') {
         const cfg = vscode.workspace.getConfiguration('hexViewer');
-        await post({ type: 'init', a: label(ua, a), b: label(ub, b), settings: { uppercase: cfg.get('uppercase', true), fontSize: cfg.get('fontSize', 0) }, licensed: !!(hooks.pro && hooks.pro.licensed) });
+        await post({ type: 'init', a: label(ua, a), b: label(ub, b), settings: { uppercase: cfg.get('uppercase', true), fontSize: cfg.get('fontSize', 0), showPro: cfg.get('showProFeatures', true) !== false }, licensed: !!(hooks.pro && hooks.pro.licensed) });
         return;
       }
       if (m.type === 'report') { if (hooks.report) await hooks.report(a, b, ua, ub); return; }

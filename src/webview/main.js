@@ -37,7 +37,7 @@ window.addEventListener('error', e => post({ type: 'error', message: String(e.me
 post({ type: 'ready' });
 
 function onMessage(m) {
-  if (proUI && proUI.onMessage(m)) return;
+  if (proUI && proUI.onMessage(m)) { if (m.type === 'pro') applyProVisibility(); return; }
   switch (m.type) {
     case 'init': return init(m);
     case 'data': return onData(m);
@@ -68,6 +68,8 @@ function onMessage(m) {
 
 function applySettings(s, first) {
   S.settings = s || {};
+  S.hidePro = !!(s && s.showPro === false);
+  applyProVisibility();
   // A choice made in this tab (saved state) wins over the setting; otherwise the setting applies, also when it changes.
   S.bpr = saved.bpr || (ROW_SIZES.includes(s.bytesPerRow) ? s.bytesPerRow : 16);
   S.encoding = saved.encoding || (ENCODINGS.some(e => e[0] === s.encoding) ? s.encoding : 'ascii');
@@ -82,6 +84,13 @@ function applySettings(s, first) {
 }
 
 function persist() { vscode.setState({ bpr: S.bpr, encoding: S.encoding, le: S.le, inspector: S.inspector, cursor: S.cursor, insert: S.insert, mode: saved.mode, panel: saved.panel }); }
+
+/** Setting hexViewer.showProFeatures false hides the Pro UI, except for licensed users. */
+function applyProVisibility() {
+  const hide = S.hidePro && !(proUI && proUI.state.licensed);
+  document.body.classList.toggle('nopro', hide);
+  if (hide && proUI && proUI.state.panel !== 'inspector') proUI.show('inspector', false);
+}
 
 /** Select [start, end) and show its first byte (Structure view, bookmarks, find in files). */
 function selectRange(start, end, focus) {

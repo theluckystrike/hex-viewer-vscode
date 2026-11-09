@@ -293,3 +293,15 @@ test('license.js and index.js make no network calls: no http/https/net/fetch', (
     assert.ok(!/require\(['"](https?|net|tls|dgram)['"]\)|\bfetch\(/.test(src), name);
   }
 });
+
+// EXEC3 (2026-11-09): the 5-seat team licence.
+test('team licence: zovo-pro-team and zovo-pro + q=5 keys unlock every product and carry 5 seats', () => {
+  assert.ok(lic.BUNDLE_SKUS.includes('zovo-pro-team'));
+  for (const sku of ['zovo-pro-team', 'zovo-pro']) {
+    const k = sign({ ...base, sku, sid: 'manual-paypal-TEAM1', q: 5 });
+    for (const p of ['hex-pro', 'docx-pro', 'xlsx-pro', 'sql-client-pro']) assert.equal(lic.checkKey(k, p, opts).ok, true, `${sku} -> ${p}`);
+    assert.equal(lic.verifyKey(k, opts).license.seats, 5);
+    assert.equal(lic.renewUrl(lic.verifyKey(k, opts).license), null); // manual sale: no Stripe renew page
+  }
+  assert.equal(lic.checkKey(sign({ ...base, sku: 'zovo-pro-teams' }), 'hex-pro', opts).reason, 'sku'); // exact match only
+});

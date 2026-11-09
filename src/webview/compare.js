@@ -38,7 +38,7 @@ function onMessage(m) {
     case 'statsProgress': el.sum.textContent = `Counting differences ${Math.floor((100 * m.done) / Math.max(1, m.total))}%`; return;
     case 'stats': return onStats(m);
     case 'notice': el.info.textContent = m.message; el.info.classList.add('bad'); return;
-    case 'pro': document.body.classList.toggle('licensed', !!m.licensed); return;
+    case 'pro': document.body.classList.toggle('licensed', !!m.licensed); if (m.licensed) document.body.classList.remove('nopro'); return;
   }
 }
 
@@ -65,6 +65,7 @@ function init(m) {
   el.report = $('button', { class: 'withpro', title: 'Save every differing range to a text, CSV or JSON report (Hex Viewer Pro)', text: 'Export report', onclick: () => post({ type: 'report' }) },
     $('span', { class: 'pro', 'aria-label': 'Pro feature', text: 'PRO' }));
   document.body.classList.toggle('licensed', !!m.licensed);
+  document.body.classList.toggle('nopro', !!(m.settings && m.settings.showPro === false) && !m.licensed);
   el.toolbar = $('div', { class: 'toolbar', role: 'toolbar', 'aria-label': 'Compare tools' }, el.prev, el.next, el.info, $('span', { class: 'sep' }), el.goto, $('span', { class: 'grow' }), el.sum, el.report, el.bpr);
   el.grid = $('div', { class: 'grid', tabindex: '0', role: 'grid', 'aria-label': `Compare ${m.a.name} and ${m.b.name}. F7 goes to the next difference, Shift+F7 to the previous one.` });
   el.head = $('div', { class: 'head', 'aria-hidden': 'true' });

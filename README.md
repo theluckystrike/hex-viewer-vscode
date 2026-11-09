@@ -152,6 +152,7 @@ Nothing about Pro shows up on its own: there is no popup when a file opens, no c
 | `hexViewer.askForRating` | true | Ask one time for a Marketplace rating after a few days of use. Nothing is sent anywhere. |
 | `hexViewer.showSupportLinks` | true | Show the small Sponsor and More free viewers links in the status line |
 | `hexViewer.templateFolders` | [] | Folders with your own binary templates for the Structure view (Pro) |
+| `hexViewer.showProFeatures` | true | Off: hide the Pro badges, tabs, buttons and commands, so you see only the free viewer. With a Zovo Pro license they always show |
 
 ## Privacy and safety
 

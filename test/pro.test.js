@@ -399,3 +399,16 @@ test('host: removing the key locks Pro again', async () => {
   assert.match(state.modal[0].msg, /Compare report export is part of Zovo Pro/);
   await a.dispose();
 });
+
+test('package.json: with hexViewer.showProFeatures off, every Pro and Zovo command leaves the palette (unless licensed)', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const W = '(config.hexViewer.showProFeatures || hexViewer.proLicensed)';
+  const pal = Object.fromEntries(pkg.contributes.menus.commandPalette.map(e => [e.command, e.when || '']));
+  for (const c of ['showStructure', 'chooseTemplate', 'addBookmark', 'nextBookmark', 'previousBookmark', 'checksums', 'findInFiles', 'getPro', 'unlockWithSponsors', 'enterLicenseKey', 'removeLicense']) assert.ok(pal['hexViewer.' + c].includes(W), c);
+  for (const c of ['openWith', 'goToOffset', 'find', 'compare', 'insertBytes']) assert.ok(!(pal['hexViewer.' + c] || '').includes('showProFeatures'), c);
+  for (const k of pkg.contributes.keybindings.filter(k => /Bookmark/.test(k.command))) assert.ok(k.when.includes(W), k.command);
+  assert.equal(pkg.contributes.configuration.properties['hexViewer.showProFeatures'].default, true);
+  assert.equal(pkg.contributes.configuration.properties['zovo.showProFeatures'], undefined);
+  const css = fs.readFileSync(path.join(__dirname, '..', 'media', 'webview.css'), 'utf8');
+  assert.match(css, /\.nopro \.tab\[data-panel="struct"\], \.nopro \.tab\[data-panel="bm"\], \.nopro \.sumrow, \.nopro \.withpro, \.nopro \.pro \{ display: none !important; \}/);
+});

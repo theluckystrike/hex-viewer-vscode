@@ -33,6 +33,8 @@ function settings() {
     showInspector: c.get('showInspector', true),
     maxRemoteMB: c.get('maxRemoteMB', 256),
     uppercase: c.get('uppercase', true),
+    // false hides every Pro badge, tab, button and command (not for licensed users: they see what they paid for)
+    showPro: c.get('showProFeatures', true) !== false,
   };
 }
 
@@ -163,7 +165,7 @@ class HexEditorProvider {
     const setActive = () => { if (panel.active) { this.active = me; this.showStatus(); } else if (this.active === me) { this.active = null; this.showStatus(); } };
     panel.onDidChangeViewState(setActive);
     setActive();
-    const cfgSub = vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('hexViewer')) post({ type: 'config', settings: settings() }); });
+    const cfgSub = vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('hexViewer') ) post({ type: 'config', settings: settings() }); });
 
     // Messages that change the bytes run one after another, so a cut or a fast series of typed bytes never
     // sees a half-applied edit. Nothing in this queue waits for the webview (a post to a webview that is still
@@ -433,6 +435,10 @@ function activate(context) {
   proHost = createProHost({ vscode, context, pro, shared, viewType: VIEW_ANY });
   compareHooks.report = (a, b, ua, ub) => proHost.exportReport(a, b, ua, ub);
   compareHooks.pro = pro;
+  // palette and key "when" clauses: config.hexViewer.showProFeatures || hexViewer.proLicensed
+  const setLicensedContext = () => vscode.commands.executeCommand('setContext', 'hexViewer.proLicensed', pro.licensed).then(undefined, () => {});
+  Promise.resolve(pro.ready).then(setLicensedContext, () => {});
+  context.subscriptions.push(pro.onDidChange(setLicensedContext));
   // vscode://zovo.zovo-hex-viewer/license?key=ZOVO1... from the license page: asks before it stores the key
   if (vscode.window.registerUriHandler) context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: uri => pro.handleUri(uri) }));
   for (const vt of VIEW_TYPES) {

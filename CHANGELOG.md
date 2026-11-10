@@ -11,6 +11,7 @@
 - The README has a "Support Zovo" section with GitHub Sponsors and the developer's GitHub profile, and "More tools by Zovo" lists related extensions.
 - The walkthrough ends with a step that links free Zovo extensions for the files that often come with this one. A link opens the extension page; nothing installs on its own.
 - The footer link "Zovo Pro, USD 19" and the Marketplace Sponsor button open the Zovo Pro tier (USD 19 once, for every Zovo extension) instead of the general GitHub Sponsors page.
+- The Pro window is shorter and clearer: "Get Zovo Pro, USD 19", "Pay with PayPal" and "I already paid" (unlock with GitHub Sponsors, enter a license key, or PayPal without a key yet). It names the other Pro tools you get. One unlock now turns on Zovo Pro in every Zovo extension on this computer (shared Zovo license module).
 - Everything else in 0.3.3 is unchanged: the free viewer and editor, the other Pro tools with 3 free tries and the rating question.
 
 ## 0.3.3 (2026-11-10)

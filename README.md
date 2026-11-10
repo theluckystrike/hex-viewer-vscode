@@ -123,22 +123,22 @@ The 26 built-in templates:
 
 ### Getting Pro
 
-The Pro features are part of Zovo Pro: USD 19 once, for life, and it unlocks the Pro features in every Zovo VS Code viewer. A team of 5 pays USD 59 once by PayPal and shares one key. When a Pro feature has no free tries left, its window has the buttons "Get Zovo Pro", "Pay with PayPal", "Unlock with GitHub Sponsors" and "I have a license key". The Pro tabs have the same buttons as "Get Pro, USD 19", "PayPal" and "Unlock".
+The Pro features are part of Zovo Pro: USD 19 once, for life, and it unlocks the Pro features in every Zovo VS Code viewer. A team of 5 pays USD 59 once by PayPal and shares one key. When a Pro feature has no free tries left, its window has the buttons "Get Zovo Pro, USD 19", "Pay with PayPal" and "I already paid" (unlock with GitHub Sponsors or enter a license key). The Pro tabs have the buttons "Get Pro, USD 19", "PayPal" and "Unlock". One unlock turns on Zovo Pro in every Zovo extension on this computer.
 
 With GitHub Sponsors:
 
-1. "Get Zovo Pro" (or the command "Hex Viewer: Get Zovo Pro") opens the ["$19 one time" tier](https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878) on GitHub Sponsors in your browser. Pay there.
-2. Come back to VS Code. Hex Viewer asks once whether you paid; choose "Unlock with GitHub Sponsors" (also a command). VS Code asks you to sign in with GitHub, and Hex Viewer asks GitHub one question: has this account bought the Zovo Pro tier? A monthly sponsorship of USD 10 or more also works while it runs. The "$15 one time" and "$5 a month" tiers on the same page are for Obsidian plugins and do not include Zovo Pro.
+1. "Get Zovo Pro, USD 19" (or the command "Zovo Pro: Get Zovo Pro") opens the ["$19 one time" tier](https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878) on GitHub Sponsors in your browser. Pay there.
+2. Come back to VS Code. Hex Viewer asks once whether you paid; choose "I already paid", then "Unlock with GitHub Sponsors" (also the command "Zovo Pro: I already paid: unlock with GitHub Sponsors"). VS Code asks you to sign in with GitHub, and Hex Viewer asks GitHub one question: has this account bought the Zovo Pro tier? A monthly sponsorship of USD 10 or more also works while it runs. The "$15 one time" and "$5 a month" tiers on the same page are for Obsidian plugins and do not include Zovo Pro.
 
 With PayPal (no GitHub payment needed):
 
-1. "Pay with PayPal" (or the command "Hex Viewer: Pay for Zovo Pro with PayPal") shows the steps and opens PayPal with the amount filled in: [USD 19 for one person](https://www.paypal.com/paypalme/najzzz/19USD) or [USD 59 for a team of 5](https://www.paypal.com/paypalme/najzzz/59USD).
+1. "Pay with PayPal" (or the command "Zovo Pro: Pay for Zovo Pro with PayPal") shows the steps and opens PayPal with the amount filled in: [USD 19 for one person](https://www.paypal.com/paypalme/najzzz/19USD) or [USD 59 for a team of 5](https://www.paypal.com/paypalme/najzzz/59USD).
 2. Send the transaction ID from the PayPal receipt with the [Zovo Pro key form](https://github.com/theluckystrike/zovo-plugin-factory/issues/new?template=zovo-pro-key.yml) on GitHub. The form is public, so post only the ID. No GitHub account? Write "Zovo Pro" in the PayPal note instead.
-3. The license key (it starts with ZOVO1.) comes to the email address of your PayPal account. Paste it with "Hex Viewer: Enter Zovo Pro License Key". The key is checked on your computer and kept in VS Code's secret storage.
+3. The license key (it starts with ZOVO1.) comes to the email address of your PayPal account. Paste it with "Zovo Pro: Enter Zovo Pro license key". The key is checked on your computer and kept in VS Code's secret storage.
 
-"Hex Viewer: Remove Zovo Pro from This Editor" removes it.
+"Zovo Pro: Remove Zovo Pro from this editor" removes it.
 
-Nothing about Pro shows up on its own: there is no popup when a file opens, no counter and no reminder. A Pro feature explains itself only when you click it after its free tries. After you click "Get Zovo Pro" or a PayPal button, one short message asks, when you are back in VS Code, whether you want to finish the unlock. It shows once, within 2 hours of the click, and not at all if Pro is already on.
+Nothing about Pro shows up on its own: there is no popup when a file opens, no counter and no reminder. A Pro feature explains itself only when you click it after its free tries. After you click "Get Zovo Pro, USD 19" or a PayPal button, one short message asks, when you are back in VS Code, whether you want to finish the unlock. It shows once, within 2 hours of the click, and not at all if Pro is already on.
 
 ## Display
 
@@ -171,7 +171,7 @@ Nothing about Pro shows up on its own: there is no popup when a file opens, no c
 
 ## Privacy and safety
 
-The extension has no telemetry and makes no network calls, except one call to GitHub when you choose "Unlock Zovo Pro with GitHub Sponsors". A monthly sponsor gets one silent recheck every 30 days. A license key is checked on your computer. "Get Zovo Pro", the PayPal buttons and the key form open pages in your browser. The extension writes to a file only when you save, or when you save a compare report. Templates are read as data and never run as code. The webview runs under a strict Content Security Policy (`default-src 'none'`, scripts by nonce, no remote sources) and gets bytes only from the extension host.
+The extension has no telemetry and makes no network calls, except one call to GitHub when you choose "Unlock Zovo Pro with GitHub Sponsors". A monthly sponsor gets one silent recheck every 30 days. A license key is checked on your computer. An unlock is also saved in `~/.zovo/pro.json` (readable only by you: the key, or the GitHub login and tier, never a token), so the other Zovo extensions on this computer turn Pro on without a second unlock. "Get Zovo Pro", the PayPal buttons and the key form open pages in your browser. The extension writes to a file only when you save, or when you save a compare report. Templates are read as data and never run as code. The webview runs under a strict Content Security Policy (`default-src 'none'`, scripts by nonce, no remote sources) and gets bytes only from the extension host.
 
 ## Limits
 

@@ -270,12 +270,13 @@ test('host: without a license the Structure view shows the top level free, neste
   await v.send({ type: 'bmAdd', start: 9, end: 10 }); await settle();
   assert.equal(state.modal.length, 1);
   assert.match(state.modal[0].msg, /Bookmarks and notes is part of Zovo Pro/);
-  assert.deepEqual(state.modal[0].items, ['Get Zovo Pro', 'Unlock with GitHub Sponsors', 'Pay with PayPal', 'I have a license key']);
-  assert.match(state.modal[0].detail, /How to buy: "Get Zovo Pro" opens the "\$19 one time" tier on GitHub Sponsors\. After you pay, come back and choose "Unlock with GitHub Sponsors"\./);
-  assert.match(state.modal[0].detail, /USD 59 for a team of 5/);
+  // module v2 (EXEC14): 3 buttons, Sponsors first; the module writes the price, the other Pro tools and "free stays free"
+  assert.deepEqual(state.modal[0].items, ['Get Zovo Pro, USD 19', 'Pay with PayPal', 'I already paid']);
   assert.match(state.modal[0].detail, /used the 3 free tries/);
   assert.match(state.modal[0].detail, /USD 19 once/);
-  assert.match(state.modal[0].detail, /stays free: viewing, find, go to offset/);
+  assert.match(state.modal[0].detail, /Nested fields in the Structure view/, 'names the other Hex Pro tools');
+  assert.match(state.modal[0].detail, /Everything that is free today stays free/);
+  assert.match(state.modal[0].detail, /010 Editor costs USD 59\.95/, 'the Hex price line');
   // bookmarks made in the free tries stay usable: edit and remove need no key
   state.picks = [items => items.find(i => i.k === 'remove')];
   await v.send({ type: 'bmEdit', id: v.last('bookmarks').list[0].id }); await settle();
@@ -284,7 +285,7 @@ test('host: without a license the Structure view shows the top level free, neste
   await v.send({ type: 'search', query: '49 48 44 52', mode: 'hex', from: 0, id: 1 }); await settle(80);
   assert.equal(v.last('searchResult').offset, 12);
   // Get Zovo Pro opens the GitHub Sponsors one-time page (the shared module's default) and nothing else
-  state.modalAnswer = 'Get Zovo Pro';
+  state.modalAnswer = 'Get Zovo Pro, USD 19';
   await v.send({ type: 'proExplain', feature: 'templates' }); await settle();
   assert.deepEqual(state.external, ['https://github.com/sponsors/theluckystrike/sponsorships?tier_id=679878']);
 });
@@ -348,7 +349,7 @@ test('host (CONV2): the Pro tab buttons Get Pro, USD 19 and PayPal open the righ
   state.modalAnswer = 'Pay USD 19 on PayPal';
   await v.send({ type: 'proPayPal' }); await settle();
   assert.equal(state.modal.at(-1).msg, 'Pay for Zovo Pro with PayPal');
-  assert.deepEqual(state.modal.at(-1).items, ['Pay USD 19 on PayPal', 'Team of 5: USD 59', 'Send the transaction ID', 'I have a license key']);
+  assert.deepEqual(state.modal.at(-1).items, ['Pay USD 19 on PayPal', 'Team of 5: USD 59', 'Send the transaction ID', 'Enter a license key']);
   assert.equal(state.external.at(-1), 'https://www.paypal.com/paypalme/najzzz/19USD');
   state.modalAnswer = 'Send the transaction ID';
   await state.commands.get('hexViewer.payWithPayPal')(); await settle();

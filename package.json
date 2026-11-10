@@ -201,28 +201,28 @@
       },
       {
         "command": "hexViewer.getPro",
-        "title": "Get Zovo Pro (USD 19 once, all Zovo viewers)",
-        "category": "Hex Viewer"
+        "title": "Get Zovo Pro (USD 19 once, all 22 Zovo extensions)",
+        "category": "Zovo Pro"
       },
       {
         "command": "hexViewer.payWithPayPal",
         "title": "Pay for Zovo Pro with PayPal (USD 19, team of 5 USD 59)",
-        "category": "Hex Viewer"
+        "category": "Zovo Pro"
       },
       {
         "command": "hexViewer.unlockWithSponsors",
-        "title": "Unlock Zovo Pro with GitHub Sponsors",
-        "category": "Hex Viewer"
+        "title": "I already paid: unlock with GitHub Sponsors",
+        "category": "Zovo Pro"
       },
       {
         "command": "hexViewer.enterLicenseKey",
-        "title": "Enter Zovo Pro License Key",
-        "category": "Hex Viewer"
+        "title": "Enter Zovo Pro license key",
+        "category": "Zovo Pro"
       },
       {
         "command": "hexViewer.removeLicense",
-        "title": "Remove Zovo Pro from This Editor",
-        "category": "Hex Viewer"
+        "title": "Remove Zovo Pro from this editor",
+        "category": "Zovo Pro"
       }
     ],
     "keybindings": [

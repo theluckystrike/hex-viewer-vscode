@@ -39,9 +39,8 @@ const FEATURES = {
   },
 };
 
-// The facade (src/license) adds the "How to buy" paragraph: the USD 19 tier on GitHub Sponsors, PayPal USD 19 or
-// USD 59 for a team of 5 (CONV2).
-const PRICE_LINE = 'Zovo Pro is USD 19 once, for life, and unlocks the Pro features in every Zovo viewer. Unlock with GitHub Sponsors asks GitHub one question and sends nothing else.';
+// The facade (src/license, module v2 EXEC14) writes the price paragraph, the other Pro tools and the buttons
+// (Get Zovo Pro, USD 19 / Pay with PayPal / I already paid).
 // EXEC13: one price comparison, shown only in this Pro panel (never on open, never in the README). Prices fetched from
 // sweetscape.com/store on 2026-11-10 (010 Editor New User: USD 59.95 Home/Academic, USD 149.95 Commercial). Set it to
 // '' when the page shows other prices.
@@ -49,7 +48,8 @@ const ANCHOR_LINE = '010 Editor costs USD 59.95 (home) or 149.95 (commercial); Z
 
 function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex Viewer', keys = KEYS, license }) {
   const emitter = new vscode.EventEmitter();
-  const opts = { vscode, context, sku: SKU, name: 'Zovo', product: productName, commandPrefix: prefix };
+  // EXEC13 (module v2, EXEC14): the panel names the other Pro tools of this extension and writes the price itself
+  const opts = { vscode, context, sku: SKU, name: 'Zovo', product: productName, commandPrefix: prefix, proTools: Object.values(FEATURES).map(f => f.title) };
   if (typeof keys.PAYMENT_URL === 'string') opts.paymentUrl = keys.PAYMENT_URL;
   if (keys.TEST_PUBKEY) { opts.publicKey = keys.TEST_PUBKEY; opts.allowTest = true; } // gate builds only
   const lic = license || createLicense(opts);
@@ -70,8 +70,10 @@ function createPro({ vscode, context, prefix = 'hexViewer', productName = 'Hex V
   /** Explain a Pro feature (one modal, only after the user clicked it) with the ways to unlock. True when unlocked. */
   async function explain(feature) {
     const f = FEATURES[feature] || { title: 'This feature', detail: '' };
-    const tried = trialUsed(feature) >= TRIAL_USES ? `You have used the ${TRIAL_USES} free tries of this feature on this computer.\n\n` : '';
-    return lic.requirePro(f.title, `${tried}${f.detail}\n\n${PRICE_LINE}${ANCHOR_LINE ? '\n\n' + ANCHOR_LINE : ''}\n\nEverything else in ${productName} stays free: viewing, find, go to offset, the data inspector, editing, insert and delete, and compare.`);
+    // module v2 (EXEC14): { detail, triesUsed }; the module adds the price, the other Pro tools and "free stays free".
+    // The 010 Editor line is Hex-only, so it rides in the detail as its own paragraph.
+    const used = trialUsed(feature) >= TRIAL_USES ? TRIAL_USES : 0;
+    return lic.requirePro(f.title, { detail: `${f.detail}${ANCHOR_LINE ? '\n\n' + ANCHOR_LINE : ''}`, triesUsed: used });
   }
 
   /** Licensed, or a free try is left (used up here). Otherwise the explanation. */

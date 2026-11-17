@@ -14,6 +14,13 @@ Free, no sign-in, works offline. See and edit the bytes of any file in VS Code, 
 - You can get anywhere. Go to an offset in hex or decimal, or jump by `+0x100` or `-16`. Find hex bytes with `??` wildcards, text, or UTF-16 text. The status bar shows the offset of the cursor.
 - Editing stays put. Type two hex digits to overwrite a byte; the cursor moves one byte and stops. Each byte is one undo step. Save writes only the changed bytes.
 
+## Teams and companies
+
+- Zovo Pro Team is the company licence: USD 59 once for a team of 5, one key, the Pro tools in every Zovo extension that has them. [See Zovo Pro Team](https://license.zovo.one/buy/zovo-pro-team?client_reference_id=readme-hex)
+- Commercial use is allowed.
+- The key is checked on your computer, so it works offline. No account and no subscription.
+- Invoice with your company name and tax ID on request: support@zovo.one.
+
 ## Quick start
 
 1. Install Hex Viewer.

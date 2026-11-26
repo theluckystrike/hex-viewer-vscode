@@ -138,3 +138,6 @@ MIT
 - [All free zovo VS Code extensions](https://marketplace.visualstudio.com/publishers/zovo) — file viewers, database clients, formatters. Offline, no telemetry, no sign-up.
 - [Full MCP server catalogue](https://theluckystrike.github.io/mcp/) — local-first MCP servers for back-office work: invoices, VAT, PDFs, spreadsheets, payroll.
 - [Hosted no-install MCP endpoints](https://mcp.zovo.one) — paste a URL in Claude / Cursor, nothing to install.
+
+---
+**Offline IDE Viewers by Zovo:** Browse 146 local-first extensions for Cursor, Windsurf, and VS Code at [vscode.zovo.one](https://vscode.zovo.one/) and read format guides at [vscode.zovo.one/guides/](https://vscode.zovo.one/guides/).
